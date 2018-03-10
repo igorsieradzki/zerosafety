@@ -1,5 +1,5 @@
 
-def gomoku(win_size=3, board_size=6):
+def gomoku(win_size=4, board_size=6):
     import numpy as np
 
     board_marks = {-1: "O", 0: " ", 1: "X"}
