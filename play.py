@@ -6,26 +6,18 @@ from gomoku import gomoku
 from policy import dumb_policy, random_policy, mcts_policy
 
 players = {
-    "Random": random_policy,
-    "Dumb": lambda game: dumb_policy(game, base_policy=random_policy),
-    "MCTS": lambda game: mcts_policy(game, base_policy=random_policy),
+    "random": random_policy,
+    "dumb": lambda game: dumb_policy(game, base_policy=random_policy),
+    "mcts": lambda game: mcts_policy(game, base_policy=random_policy),
 }
 
-def game_result(player1, player2):
-    game = gomoku(board_size=5)
+player1 = players["dumb"] ### random / dumb / mcts
+player2 = players["dumb"] ### random / dumb / mcts
 
-    while game.winner is None:
-        game = game.move(player1(game))
-        print(game)
+game = gomoku()
 
-        player1, player2 = player2, player1
+while game.winner is None:
+    game = game.move(player1(game))
+    print(game)
 
-    return game.winner
-
-player1 = "Random" ### Random / Dumb / MCTS
-player2 = "Dumb" ### Random / Dumb / MCTS
-print("X:", player1)
-print("O:", player2)
-
-result = game_result(players[player1], players[player2])
-print("Winner:  ", {-1: player2, 0: "(draw)", 1: player1}[result])
+    player1, player2 = player2, player1
