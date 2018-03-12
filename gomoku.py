@@ -1,19 +1,19 @@
 
+# How many repeated elements around this position in 1d array?
+def streak_length(array, around):
+    assert array[around] != 0
+    a = around - 1
+    while a >= 0 and array[a] == array[around]:
+        a -= 1
+    b = around + 1
+    while b < len(array) and array[b] == array[around]:
+        b += 1
+    return b - a - 1
+
 def gomoku(win_size=4, board_size=6):
     import numpy as np
 
     board_marks = {-1: "O", 0: " ", 1: "X"}
-
-    # How many repeated elements around this position in 1d array?
-    def streak_length(array, around):
-        assert array[around] != 0
-        a = around - 1
-        while a >= 0 and array[a] == array[around]:
-            a -= 1
-        b = around + 1
-        while b < len(array) and array[b] == array[around]:
-            b += 1
-        return b - a - 1
 
     # Get top-left to bottom-right diagonal from a 2d array
     def diagonal_slice(array, y, x):
@@ -68,7 +68,7 @@ def gomoku(win_size=4, board_size=6):
                 self.available_moves = (board == 1000).reshape(-1)
 
         def __str__(self):
-            s = "\n " + "-" * (len(self.board[0]) * 2 + 1) + "\n"
+            s = "\n,-" + "+-" * len(self.board[0]) + ",\n"
             for i, row in enumerate(self.board):
                 s += "| "
                 for node in row:
@@ -84,7 +84,7 @@ def gomoku(win_size=4, board_size=6):
                         s += (" Game result: won by "
                             + board_marks[self.winner])
                 s += "\n"
-            s += " " + "-" * (len(self.board[0]) * 2 + 1) + "\n"
+            s += "`-" + "+-" * len(self.board[0]) + "`\n"
             return s
 
         __repr__ = __str__
