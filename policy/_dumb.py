@@ -9,6 +9,7 @@ def dumb_score(game, *, base_policy, n_playouts):
     if game.winner is not None:
         return game.winner
 
+    n_playouts = max(1, int(n_playouts))
     score = 0
     for _ in range(n_playouts):
         score += playout_winner(game, base_policy=base_policy)
@@ -24,7 +25,7 @@ def print_board_info(game, data):
         print("\n")
 
 def dumb_policy(game, *, base_policy,
-        n_playouts=5000, debug=False):
+        n_playouts=1600, debug=False):
     import numpy as np
 
     assert game.winner is None

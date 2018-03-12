@@ -48,7 +48,7 @@ def add_playout(node, *, base_policy):
     return winner
 
 def mcts_policy(game, *, base_policy,
-        n_playouts=5000, debug=False):
+        n_playouts=1600, debug=False):
     assert game.winner is None
 
     tree = [game, 0, 0, None] # [game state, wins, playouts, children]
