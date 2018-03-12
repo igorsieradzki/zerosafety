@@ -21,7 +21,8 @@ def gomoku(win_size=4, board_size=6):
         return array[idx + (y-x), idx], x-idx[0]
 
     class Node(object):
-        def __init__(self, board, next_player, *, winner=None):
+        def __init__(self, board, next_player, *,
+                winner=None, last_move=None):
             # Make sure this ndarray stays read-only
             board.setflags(write=False)
             board = board[:]
@@ -47,17 +48,19 @@ def gomoku(win_size=4, board_size=6):
                         board_size - (y+1), x)) == win_size
                 ):
                     return Node(new_board, -next_player,
-                        winner=next_player)
+                        winner=next_player, last_move=n)
 
                 # Check for draws (no free space)
                 if (new_board == 0).astype(np.int32).sum() == 0:
-                    return Node(new_board, -next_player, winner=0)
+                    return Node(new_board, -next_player,
+                        winner=0, last_move=n)
 
-                return Node(new_board, -next_player)
+                return Node(new_board, -next_player, last_move=n)
 
             self.board = board
             self.next_player = next_player
             self.winner = winner
+            self.last_move = last_move
 
             if winner is None:
                 self.move = move
