@@ -6,47 +6,37 @@ code-variants --run --copies 100 ./play.py __results/ || exit 1
 RESULTS=$(grep -r 'Game result:' __results) || exit 1
 RESULTS=$(sed -r -e 's|^.*/([a-z]+)_([a-z]+)_.*\s([^\s]+)$|\1 \2 \3|' <<<"$RESULTS") || exit 1
 
-declare -A WIN
-declare -A LOSS
-declare -A DRAW
-declare -A PLAYER
+declare -A COUNT
 
 while read p1 p2 result; do
-    PLAYER["$p1"]=1
-    PLAYER["$p2"]=1
     case "x$result" in
-        xX)
-            COUNT=${WIN["${p1}_${p2}"]:-0}
-            let COUNT=COUNT+1
-            WIN["${p1}_${p2}"]="$COUNT"
-        ;;
-        xO)
-            COUNT=${LOSS["${p1}_${p2}"]:-0}
-            let COUNT=COUNT+1
-            LOSS["${p1}_${p2}"]="$COUNT"
-        ;;
-        xdraw)
-            COUNT=${DRAW["${p1}_${p2}"]:-0}
-            let COUNT=COUNT+1
-            DRAW["${p1}_${p2}"]="$COUNT"
-        ;;
+        xX) ;;
+        xO) ;;
+        xdraw) ;;
         *)
             echo "Unrecognized result: $result" 1>&2
             exit 1
         ;;
     esac
+
+    C=${COUNT["${p1}_${p2}_${result}"]:-0}
+    let C=C+1
+    COUNT["${p1}_${p2}_${result}"]="$C"
 done <<<"$RESULTS"
 
+PLAYERS=$(while read p1 p2 result; do \
+    echo "$p1"; echo "$p2"; done <<<"$RESULTS" | sort -u)
+
 printf "%12s" ""
-for p2 in "${!PLAYER[@]}"; do
+for p2 in $PLAYERS; do
     printf "%12s" "W: $p2"
 done
 echo
 
-for p1 in "${!PLAYER[@]}"; do
+for p1 in $PLAYERS; do
     printf "%12s" "B: $p1"
-    for p2 in "${!PLAYER[@]}"; do
-        printf "%12s" "${WIN["${p1}_${p2}"]:-0}/${DRAW["${p1}_${p2}"]:-0}/${LOSS["${p1}_${p2}"]:-0}"
+    for p2 in $PLAYERS; do
+        printf "%12s" "${COUNT["${p1}_${p2}_X"]:-0}/${COUNT["${p1}_${p2}_draw"]:-0}/${COUNT["${p1}_${p2}_O"]:-0}"
     done
     echo
 done
