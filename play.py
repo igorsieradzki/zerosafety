@@ -11,8 +11,8 @@ players = {
     "mcts": lambda game: mcts_policy(game, base_policy=random_policy),
 }
 
-player1 = players["dumb"] ### random / dumb / mcts
-player2 = players["dumb"] ### random / dumb / mcts
+player1 = players["dumb"] ### dumb / mcts
+player2 = players["mcts"] ### dumb / mcts
 
 game = gomoku()
 

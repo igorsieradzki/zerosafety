@@ -9,7 +9,6 @@ def dumb_score(game, *, base_policy, n_playouts):
     if game.winner is not None:
         return game.winner
 
-    n_playouts = max(1, int(n_playouts))
     score = 0
     for _ in range(n_playouts):
         score += playout_winner(game, base_policy=base_policy)
@@ -28,19 +27,18 @@ def dumb_policy(game, *, base_policy,
         n_playouts=1600, debug=False):
     import numpy as np
 
-    assert game.winner is None
+    n_playouts //= np.array(game.available_moves, dtype=np.int32).sum()
+    n_playouts = max(1, int(n_playouts))
 
     scores = [
-        dumb_score(
-            game.move(i),
-            base_policy=base_policy,
-            n_playouts=n_playouts // len(game.available_moves)
-        ) * game.next_player
+        dumb_score(game.move(i), base_policy=base_policy,
+            n_playouts=n_playouts) * game.next_player
         if is_available else -1000.0
         for i, is_available in enumerate(game.available_moves)
     ]
 
     if debug:
-        print_board_info(game, scores)
+        print_board_info(game, ["%d%%/%d" % (50.0*(s+1.0), n_playouts)
+            if s > -100.0 else "" for s in scores])
 
     return np.argmax(scores)

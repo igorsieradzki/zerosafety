@@ -57,6 +57,7 @@ def gomoku(win_size=4, board_size=6):
 
                 return Node(new_board, -next_player, last_move=n)
 
+            self.game_id = "gomoku_%d_%d" % (win_size, board_size)
             self.board = board
             self.next_player = next_player
             self.winner = winner
