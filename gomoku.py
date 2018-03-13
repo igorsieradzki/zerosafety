@@ -1,4 +1,6 @@
 
+import numpy as np
+
 # How many repeated elements around this position in 1d array?
 def streak_length(array, around):
     assert array[around] != 0
@@ -10,16 +12,12 @@ def streak_length(array, around):
         b += 1
     return b - a - 1
 
+# Get top-left to bottom-right diagonal from a 2d array
+def diagonal_slice(array, y, x):
+    idx = np.arange(max(0, x-y), len(array)-max(0, y-x))
+    return array[idx + (y-x), idx], x-idx[0]
+
 def gomoku(win_size=4, board_size=6):
-    import numpy as np
-
-    board_marks = {-1: "O", 0: " ", 1: "X"}
-
-    # Get top-left to bottom-right diagonal from a 2d array
-    def diagonal_slice(array, y, x):
-        idx = np.arange(max(0, x-y), len(array)-max(0, y-x))
-        return array[idx + (y-x), idx], x-idx[0]
-
     class Node(object):
         def __init__(self, board, next_player, *,
                 winner=None, last_move=None):
@@ -72,6 +70,8 @@ def gomoku(win_size=4, board_size=6):
                 self.available_moves = (board == 1000).reshape(-1)
 
         def __str__(self):
+            board_marks = {-1: "O", 0: " ", 1: "X"}
+
             s = "\n,-" + "+-" * len(self.board[0]) + ",\n"
             for i, row in enumerate(self.board):
                 s += "| "
