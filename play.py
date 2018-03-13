@@ -3,21 +3,19 @@
 import numpy as np
 
 from gomoku import gomoku
-from policy import dumb_policy, random_policy, mcts_policy
+from players import *
 
-players = {
-    "random": random_policy,
-    "dumb": lambda game: dumb_policy(game, base_policy=random_policy),
-    "mcts": lambda game: mcts_policy(game, base_policy=random_policy),
-}
-
-player1 = players["dumb"] ### dumb / mcts
-player2 = players["mcts"] ### dumb / mcts
+player1 = DumbPlayouts() ### RandomMoves / DumbPlayouts / RandomMCTS
+player2 = RandomMCTS() ### RandomMoves / DumbPlayouts / RandomMCTS
 
 game = gomoku()
+player1.load_game(game)
+player2.load_game(game)
 
 while game.winner is None:
-    game = game.move(player1(game))
+    move = player1.make_move()
+    player2.add_move(move)
+    game = game.move(move)
     print(game)
 
     player1, player2 = player2, player1
