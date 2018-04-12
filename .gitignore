@@ -5,3 +5,4 @@ __*
 .ipynb_checkpoints
 *.png
 *.log
+.idea/
