@@ -83,7 +83,8 @@ class PolicyValueNet():
                 learning_rate=self.learning_rate).minimize(self.loss)
 
         # Make a session
-        self.session = tf.Session()
+        gpu_options = tf.GPUOptions(allow_growth=True)
+        self.session = tf.Session(graph=self.graph, config=tf.ConfigProto(gpu_options=gpu_options))
 
         # calc policy entropy, for monitoring only
         self.entropy = tf.negative(tf.reduce_mean(
@@ -120,7 +121,7 @@ class PolicyValueNet():
         current_state = np.ascontiguousarray(board.current_state().reshape(
                 -1, 4, self.board_width, self.board_height))
         act_probs, value = self.policy_value(current_state)
-        act_probs = zip(legal_positions, act_probs[0][legal_positions])
+        act_probs = (legal_positions, act_probs[0][legal_positions])
         return act_probs, value
 
     def train_step(self, state_batch, mcts_probs, winner_batch, lr):

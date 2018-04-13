@@ -6,9 +6,11 @@ network to guide the tree search and evaluate the leaf nodes
 @author: Junxiao Song
 """
 
+from src import logger
 import numpy as np
 import copy
 
+import pdb
 
 def softmax(x):
     probs = np.exp(x - np.max(x))
@@ -31,13 +33,19 @@ class TreeNode(object):
         self._u = 0
         self._P = prior_p
 
-    def expand(self, action_priors):
+    def expand(self, moves, probs):
         """Expand tree by creating new children.
         action_priors: a list of tuples of actions and their prior probability
             according to the policy function.
         """
-        for action, prob in action_priors:
+
+        # correct place to add dirichlet noise for exploration, a bit hack'y right now
+        explor_noise = np.random.dirichlet(0.3 * np.ones(len(probs)))
+
+        for eps, action, prob in zip(explor_noise, moves, probs):
             if action not in self._children:
+                if self.is_root():
+                    prob = 0.75 * prob + 0.25 * eps
                 self._children[action] = TreeNode(self, prob)
 
     def select(self, c_puct):
@@ -119,11 +127,11 @@ class MCTS(object):
         # Evaluate the leaf using a network which outputs a list of
         # (action, probability) tuples p and also a score v in [-1, 1]
         # for the current player.
-        action_probs, leaf_value = self._policy(state)
+        (moves, probs), leaf_value = self._policy(state)
         # Check for end of game.
         end, winner = state.game_end()
         if not end:
-            node.expand(action_probs)
+            node.expand(moves, probs)
         else:
             # for end state，return the "true" leaf_value
             if winner == -1:  # tie
@@ -149,6 +157,7 @@ class MCTS(object):
         # calc the move probabilities based on visit counts at the root node
         act_visits = [(act, node._n_visits)
                       for act, node in self._root._children.items()]
+
         acts, visits = zip(*act_visits)
         act_probs = softmax(1.0/temp * np.log(np.array(visits) + 1e-10))
 
@@ -187,24 +196,28 @@ class MCTSPlayer(object):
         # the pi vector returned by MCTS as in the alphaGo Zero paper
         move_probs = np.zeros(board.width*board.height)
         if len(sensible_moves) > 0:
-            acts, probs = self.mcts.get_move_probs(board, temp)
-            move_probs[list(acts)] = probs
-
-            # TODO: fix this, dirichlet noise should be added to probabilities when exanpding the root node
+            actions, probs = self.mcts.get_move_probs(board, temp)
+            move_probs[list(actions)] = probs
 
             if self._is_selfplay:
-                # add Dirichlet Noise for exploration (needed for
-                # self-play training)
-                move = np.random.choice(
-                    acts,
-                    p=0.75*probs + 0.25*np.random.dirichlet(0.3*np.ones(len(probs)))
-                )
+
+                # this is the previous dirichlet noise which is wrong, leaving in here if case the change breaks everything
+
+                # # add Dirichlet Noise for exploration (needed for
+                # # self-play training)
+                # move = np.random.choice(
+                #     acts,
+                #     p=0.75*probs + 0.25*np.random.dirichlet(0.3*np.ones(len(probs)))
+                # )
+
+                move = np.random.choice(actions, p=probs)
+
                 # update the root node and reuse the search tree
                 self.mcts.update_with_move(move)
             else:
                 # with the default temp=1e-3, it is almost equivalent
                 # to choosing the move with the highest prob
-                move = np.random.choice(acts, p=probs)
+                move = np.random.choice(actions, p=probs)
                 # reset the root node
                 self.mcts.update_with_move(-1)
 #                location = board.move_to_location(move)
@@ -215,7 +228,7 @@ class MCTSPlayer(object):
             else:
                 return move
         else:
-            print("WARNING: the board is full")
+            logger.warning("[!] Game board is full!")
 
     def __str__(self):
         return "MCTS {}".format(self.player)

@@ -6,3 +6,5 @@ __*
 *.png
 *.log
 .idea/
+results/
+.env
