@@ -3,7 +3,6 @@
 @author: Junxiao Song
 """
 
-from __future__ import print_function
 import numpy as np
 
 
@@ -194,6 +193,8 @@ class Game(object):
         self.board.init_board()
         p1, p2 = self.board.players
         states, mcts_probs, current_players = [], [], []
+        move_counter = 0
+
         while True:
             move, move_probs = player.get_action(self.board,
                                                  temp=temp,
@@ -207,6 +208,13 @@ class Game(object):
             if is_shown:
                 self.graphic(self.board, p1, p2)
             end, winner = self.board.game_end()
+
+            move_counter += 1
+
+            # added change of the temperature used in softmax
+            if move_counter >= 30:
+                temp = 1e-3
+
             if end:
                 # winner from the perspective of the current player of each state
                 winners_z = np.zeros(len(current_players))
@@ -220,4 +228,4 @@ class Game(object):
                         print("Game end. Winner is player:", winner)
                     else:
                         print("Game end. Tie")
-                return winner, zip(states, mcts_probs, winners_z)
+                return winner, (np.stack(states), np.stack(mcts_probs), winners_z)

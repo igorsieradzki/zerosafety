@@ -6,16 +6,17 @@ An implementation of the training pipeline of AlphaZero for Gomoku
 """
 
 from datetime import datetime
+from time import time
 import os
 from src import logger, results_dir
 
 import random
 import numpy as np
 from collections import defaultdict, deque
-from game import Board, Game
-from mcts_pure import MCTSPlayer as MCTS_Pure
-from mcts_alphaZero import MCTSPlayer
-from policy_value_net_tensorflow import PolicyValueNet # Tensorflow
+from src.game import Board, Game
+from src.mcts_pure import MCTSPlayer as MCTS_Pure
+from src.mcts_alphaZero import MCTSPlayer
+from src.policy_value_net_tensorflow import PolicyValueNet # Tensorflow
 
 
 class TrainPipeline():
@@ -31,14 +32,18 @@ class TrainPipeline():
         # training params
         self.learn_rate = 2e-3
         self.lr_multiplier = 1.0  # adaptively adjust the learning rate based on KL
-        self.temp = 1.0  # the temperature param
+        self.initial_temp = 1.0  # the temperature param
         self.n_playout = 400  # num of simulations for each move
         self.c_puct = 5
         self.buffer_size = 10000
         self.batch_size = 512  # mini-batch size for training
-        self.data_buffer = deque(maxlen=self.buffer_size)
+
+        self.states_buffer = deque(maxlen=self.buffer_size)
+        self.probs_buffer = deque(maxlen=self.buffer_size)
+        self.winners_buffer = deque(maxlen=self.buffer_size)
+
         self.play_batch_size = 1
-        self.epochs = 5  # num of train_steps for each update
+        self.train_steps = 5  # num of train_steps for each update
         self.kl_targ = 0.02
         self.check_freq = 50
         self.game_batch_num = 1500
@@ -60,52 +65,65 @@ class TrainPipeline():
                                       n_playout=self.n_playout,
                                       is_selfplay=1)
 
-    def get_equi_data(self, play_data):
+    def get_equi_data(self, states, probs, winners):
         """augment the data set by rotation and flipping
         play_data: [(state, mcts_prob, winner_z), ..., ...]
         """
-        extend_data = []
-        for state, mcts_porb, winner in play_data:
-            for i in [1, 2, 3, 4]:
-                # rotate counterclockwise
-                equi_state = np.array([np.rot90(s, i) for s in state])
-                equi_mcts_prob = np.rot90(np.flipud(
-                    mcts_porb.reshape(self.board_height, self.board_width)), i)
-                extend_data.append((equi_state,
-                                    np.flipud(equi_mcts_prob).flatten(),
-                                    winner))
-                # flip horizontally
-                equi_state = np.array([np.fliplr(s) for s in equi_state])
-                equi_mcts_prob = np.fliplr(equi_mcts_prob)
-                extend_data.append((equi_state,
-                                    np.flipud(equi_mcts_prob).flatten(),
-                                    winner))
-        return extend_data
+        # state rotation
+        states = np.concatenate([np.rot90(states, k=i, axes=(2,3)) for i in range(1,5)], axis=0)
+        # state horizontal flip
+        states = np.concatenate([states, np.flip(states, axis=3)], axis=0)
+
+        # reshape with flipping due to dumb original move encoding, see game.py:33
+        reshaped_probs = np.flip(probs.reshape(-1, self.board_height, self.board_width), axis=1)
+        # probs rotation
+        probs = np.concatenate([np.rot90(reshaped_probs, k=i, axes=(1,2)) for i in range(1,5)], axis=0)
+        # probs horizontal flip
+        probs = np.concatenate([probs, np.flip(probs, axis=2)], axis=0)
+        # reshape the probs back
+        probs = np.reshape(np.flip(probs, axis=1), (-1, self.board_height*self.board_width))
+
+        winners = np.tile(winners, 8)
+
+        return states, probs, winners
 
     def collect_selfplay_data(self, n_games=1):
         """collect self-play data for training"""
         for i in range(n_games):
-            winner, play_data = self.game.start_self_play(self.mcts_player,
-                                                          temp=self.temp)
-            play_data = list(play_data)[:]
-            self.episode_len = len(play_data)
+            winner, (states, probs, winners) = self.game.start_self_play(self.mcts_player,
+                                                          temp=self.initial_temp)
+            self.episode_len = states.shape[0]
             # augment the data
-            play_data = self.get_equi_data(play_data)
-            self.data_buffer.extend(play_data)
+
+            states, probs, winners = self.get_equi_data(states, probs, winners)
+            self.states_buffer.extend(states)
+            self.probs_buffer.extend(probs)
+            self.winners_buffer.extend(winners)
 
     def policy_update(self):
         """update the policy-value net"""
-        mini_batch = random.sample(self.data_buffer, self.batch_size)
-        state_batch = [data[0] for data in mini_batch]
-        mcts_probs_batch = [data[1] for data in mini_batch]
-        winner_batch = [data[2] for data in mini_batch]
-        old_probs, old_v = self.policy_value_net.policy_value(state_batch)
-        for i in range(self.epochs):
-            loss, entropy = self.policy_value_net.train_step(
-                state_batch,
-                mcts_probs_batch,
-                winner_batch,
-                self.learn_rate*self.lr_multiplier)
+
+        # TODO: maybe change this to single train step with bigger batch size?
+
+        start = time()
+
+        assert len(self.states_buffer) == len(self.probs_buffer)
+        assert len(self.states_buffer) == len(self.winners_buffer)
+
+        for _ in range(self.train_steps):
+
+            batch_ids = np.random.choice(len(self.states_buffer), self.batch_size, replace=False)
+            state_batch = np.array(self.states_buffer)[batch_ids]
+            mcts_probs_batch = np.array(self.probs_buffer)[batch_ids]
+            winner_batch = np.array(self.winners_buffer)[batch_ids]
+
+            old_probs, old_v = self.policy_value_net.policy_value(state_batch)
+
+            loss, entropy = self.policy_value_net.train_step(state_batch,
+                                                             mcts_probs_batch,
+                                                             winner_batch,
+                                                             self.learn_rate*self.lr_multiplier)
+
             new_probs, new_v = self.policy_value_net.policy_value(state_batch)
             kl = np.mean(np.sum(old_probs * (
                 np.log(old_probs + 1e-10) - np.log(new_probs + 1e-10)),
@@ -113,6 +131,7 @@ class TrainPipeline():
                          )
             if kl > self.kl_targ * 4:  # early stopping if D_KL diverges badly
                 break
+
         # adaptively adjust the learning rate
         if kl > self.kl_targ * 2 and self.lr_multiplier > 0.1:
             self.lr_multiplier /= 1.5
@@ -125,18 +144,23 @@ class TrainPipeline():
         explained_var_new = (1 -
                              np.var(np.array(winner_batch) - new_v.flatten()) /
                              np.var(np.array(winner_batch)))
+
+        update_time = time()- start
+
         logger.debug(("kl:{:.3f}, "
                       "lr_multiplier:{:.3f}, "
                       "loss:{:.3f}, "
                       "entropy:{:.3f}, "
                       "explained_var_old:{:.3f}, "
-                      "explained_var_new:{:.3f}"
+                      "explained_var_new:{:.3f}, "
+                      "time: {:.2f}"
                       ).format(kl,
                                self.lr_multiplier,
                                loss,
                                entropy,
                                explained_var_old,
-                               explained_var_new))
+                               explained_var_new,
+                               update_time))
         return loss, entropy
 
     def policy_evaluate(self, n_games=10):
@@ -172,19 +196,25 @@ class TrainPipeline():
                                                                           min=now.minute))
 
         os.makedirs(save_dir)
+        mean_iter_time = 0
 
         # run the training pipeline
         try:
             for i in range(self.game_batch_num):
+                start = time()
                 self.collect_selfplay_data(self.play_batch_size)
-                logger.info("iter: {}, episode_len:{}".format(
-                    i+1, self.episode_len))
-                if len(self.data_buffer) > self.batch_size:
+                mcts_time = time() - start
+                logger.info("iter: {}, episode_len:{}, mean time: {:.2f}".format(i + 1, self.episode_len, mean_iter_time))
+
+                if len(self.states_buffer) > self.batch_size:
                     loss, entropy = self.policy_update()
+
+                mean_iter_time += ((time() - start) - mean_iter_time) / (i + 1)
+
                 # check the performance of the current model,
                 # and save the model params
                 if (i+1) % self.check_freq == 0:
-                    logger.info("current self-play batch: {}".format(i+1))
+                    logger.info("current self-play batch: {}, evaluating...".format(i+1))
                     win_ratio = self.policy_evaluate()
                     self.policy_value_net.save_model(os.path.join(save_dir, 'current_policy.model'))
                     if win_ratio > self.best_win_ratio:

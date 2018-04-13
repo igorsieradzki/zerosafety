@@ -81,8 +81,7 @@ class TreeNode(object):
         c_puct: a number in (0, inf) controlling the relative impact of
             value Q, and prior probability P, on this node's score.
         """
-        self._u = (c_puct * self._P *
-                   np.sqrt(self._parent._n_visits) / (1 + self._n_visits))
+        self._u = (c_puct * self._P * np.sqrt(self._parent._n_visits) / (1 + self._n_visits))
         return self._Q + self._u
 
     def is_leaf(self):
@@ -159,7 +158,7 @@ class MCTS(object):
                       for act, node in self._root._children.items()]
 
         acts, visits = zip(*act_visits)
-        act_probs = softmax(1.0/temp * np.log(np.array(visits) + 1e-10))
+        act_probs = softmax((1.0/temp) * np.log(np.array(visits) + 1e-10))
 
         return acts, act_probs
 
@@ -194,7 +193,7 @@ class MCTSPlayer(object):
     def get_action(self, board, temp=1e-3, return_prob=0):
         sensible_moves = board.availables
         # the pi vector returned by MCTS as in the alphaGo Zero paper
-        move_probs = np.zeros(board.width*board.height)
+        move_probs = np.zeros(board.width * board.height)
         if len(sensible_moves) > 0:
             actions, probs = self.mcts.get_move_probs(board, temp)
             move_probs[list(actions)] = probs

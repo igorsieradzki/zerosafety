@@ -1,5 +1,8 @@
 import logging
 import os
+import numpy as np
+
+np.random.seed(1337)
 
 def setup_logger(name):
     formatter = logging.Formatter(fmt='%(asctime)s - %(levelname)s - %(module)s - %(message)s')
