@@ -67,10 +67,10 @@ class PolicyValueNet():
                                          activation=tf.nn.log_softmax)
         # 4 Evaluation Networks
         value_conv = tf.layers.conv2d(out,
-                                           filters=1,
-                                           kernel_size=[1, 1],
-                                           padding="same",
-                                           activation=None)
+                                      filters=1,
+                                      kernel_size=[1, 1],
+                                      padding="same",
+                                      activation=None)
 
         self.value_conv = tf.nn.relu(tf.layers.batch_normalization(value_conv))
 
@@ -104,7 +104,7 @@ class PolicyValueNet():
 
         update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
         with tf.control_dependencies(update_ops):
-            self.optimizer = tf.train.AdamOptimizer(learning_rate=self.learning_rate).minimize(self.loss)
+            self.optimizer = tf.train.MomentumOptimizer(learning_rate=self.learning_rate, momentum=0.9).minimize(self.loss)
 
         # Make a session
         gpu_options = tf.GPUOptions(allow_growth=True)
