@@ -19,3 +19,4 @@ logger = setup_logger("zero")
 
 repository_dir = os.path.abspath(os.path.join(os.path.dirname(os.path.realpath(__file__)), os.pardir)) # fuck yeah python
 results_dir = os.environ.get('RESULTS_DIR', os.path.join(repository_dir, 'results'))
+data_dir = os.environ.get('DATA_DIR', os.path.join(repository_dir, 'data'))

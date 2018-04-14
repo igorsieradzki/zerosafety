@@ -7,5 +7,5 @@ __*
 *.log
 .idea/
 results/
-results
+data/
 .env
