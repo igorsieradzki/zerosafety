@@ -40,7 +40,7 @@ class TreeNode(object):
         """
 
         # correct place to add dirichlet noise for exploration, a bit hack'y right now
-        explor_noise = np.random.dirichlet(0.3 * np.ones(len(probs)))
+        explor_noise = np.random.dirichlet(0.43 * np.ones(len(probs)))
 
         for eps, action, prob in zip(explor_noise, moves, probs):
             if action not in self._children:

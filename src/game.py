@@ -212,7 +212,7 @@ class Game(object):
             move_counter += 1
 
             # added change of the temperature used in softmax
-            if move_counter >= 30:
+            if move_counter >= 6:
                 temp = 1e-3
 
             if end:
