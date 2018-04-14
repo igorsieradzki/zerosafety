@@ -11,12 +11,15 @@ Tested in Tensorflow 1.4 and 1.5
 
 import numpy as np
 import tensorflow as tf
+from src.nn_utils import alpha_zero_conv_block, alpha_zero_residual_block
 
 
 class PolicyValueNet():
-    def __init__(self, board_width, board_height, model_file=None):
+    def __init__(self, board_width, board_height, model_file=None, n_res_blocks=9):
         self.board_width = board_width
         self.board_height = board_height
+
+        self.n_res_blocks = n_res_blocks
 
         # Define the tensorflow neural network
         # 1. Input:
@@ -24,47 +27,60 @@ class PolicyValueNet():
         self.input_states_reshaped = tf.reshape(self.input_states, [-1, board_height, board_width, 4])
 
         # 2. Common Networks Layers
-        self.conv1 = tf.layers.conv2d(inputs=self.input_states_reshaped,
-                                      filters=32,
-                                      kernel_size=[3, 3],
-                                      padding="same",
-                                      activation=tf.nn.relu)
-        self.conv2 = tf.layers.conv2d(inputs=self.conv1,
-                                      filters=64,
-                                      kernel_size=[3, 3],
-                                      padding="same",
-                                      activation=tf.nn.relu)
-        self.conv3 = tf.layers.conv2d(inputs=self.conv2,
-                                      filters=128,
-                                      kernel_size=[3, 3],
-                                      padding="same",
-                                      activation=tf.nn.relu)
+        # self.conv1 = tf.layers.conv2d(inputs=self.input_states_reshaped,
+        #                               filters=32,
+        #                               kernel_size=[3, 3],
+        #                               padding="same",
+        #                               activation=tf.nn.relu)
+        # self.conv2 = tf.layers.conv2d(inputs=self.conv1,
+        #                               filters=64,
+        #                               kernel_size=[3, 3],
+        #                               padding="same",
+        #                               activation=tf.nn.relu)
+        # self.conv3 = tf.layers.conv2d(inputs=self.conv2,
+        #                               filters=128,
+        #                               kernel_size=[3, 3],
+        #                               padding="same",
+        #                               activation=tf.nn.relu)
+
+        out = alpha_zero_conv_block(self.input_states_reshaped)
+
+        for _ in range(self.n_res_blocks):
+            out = alpha_zero_residual_block(out)
+
         # 3-1 Action Networks
-        self.action_conv = tf.layers.conv2d(inputs=self.conv3,
-                                            filters=4,
-                                            kernel_size=[1, 1],
-                                            padding="same",
-                                            activation=tf.nn.relu)
+        action_conv = tf.layers.conv2d(inputs=out,
+                                       filters=2,
+                                       kernel_size=[1, 1],
+                                       padding="same",
+                                       activation=None)
+
+        self.action_conv = tf.nn.relu(tf.layers.batch_normalization(action_conv))
+
+
         # Flatten the tensor
-        self.action_conv_flat = tf.reshape(self.action_conv, [-1, 4 * board_height * board_width])
+        self.action_conv_flat = tf.reshape(self.action_conv, [-1, 2 * board_height * board_width])
         # 3-2 Full connected layer, the output is the log probability of moves
         # on each slot on the board
         self.action_fc = tf.layers.dense(inputs=self.action_conv_flat,
                                          units=board_height * board_width,
                                          activation=tf.nn.log_softmax)
         # 4 Evaluation Networks
-        self.evaluation_conv = tf.layers.conv2d(inputs=self.conv3,
-                                                filters=2,
-                                                kernel_size=[1, 1],
-                                                padding="same",
-                                                activation=tf.nn.relu)
-        self.evaluation_conv_flat = tf.reshape(self.evaluation_conv, [-1, 2 * board_height * board_width])
-        self.evaluation_fc1 = tf.layers.dense(inputs=self.evaluation_conv_flat, units=64, activation=tf.nn.relu)
+        value_conv = tf.layers.conv2d(out,
+                                           filters=1,
+                                           kernel_size=[1, 1],
+                                           padding="same",
+                                           activation=None)
+
+        self.value_conv = tf.nn.relu(tf.layers.batch_normalization(value_conv))
+
+        self.value_conv_flat = tf.reshape(self.value_conv, [-1, board_height * board_width])
+        self.value_fc1 = tf.layers.dense(inputs=self.value_conv_flat, units=64, activation=tf.nn.relu)
 
         # output the score of evaluation on current state
-        self.evaluation_fc2 = tf.layers.dense(inputs=self.evaluation_fc1,
-                                              units=1,
-                                              activation=tf.nn.tanh)
+        self.value_fc2 = tf.layers.dense(inputs=self.value_fc1,
+                                         units=1,
+                                         activation=tf.nn.tanh)
 
         # Define the Loss function
         # 1. Label: the array containing if the game wins or not for each state
@@ -72,7 +88,7 @@ class PolicyValueNet():
         # 2. Predictions: the array containing the evaluation score of each state
         # which is self.evaluation_fc2
         # 3-1. Value Loss function
-        self.value_loss = tf.losses.mean_squared_error(self.labels, self.evaluation_fc2)
+        self.value_loss = tf.losses.mean_squared_error(self.labels, self.value_fc2)
         # 3-2. Policy Loss function
         self.mcts_probs = tf.placeholder(tf.float32, shape=[None, board_height * board_width])
         self.policy_loss = tf.negative(tf.reduce_mean(tf.reduce_sum(tf.multiply(self.mcts_probs, self.action_fc), 1)))
@@ -85,7 +101,10 @@ class PolicyValueNet():
 
         # Define the optimizer we use for training
         self.learning_rate = tf.placeholder(tf.float32)
-        self.optimizer = tf.train.AdamOptimizer(learning_rate=self.learning_rate).minimize(self.loss)
+
+        update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
+        with tf.control_dependencies(update_ops):
+            self.optimizer = tf.train.AdamOptimizer(learning_rate=self.learning_rate).minimize(self.loss)
 
         # Make a session
         gpu_options = tf.GPUOptions(allow_growth=True)
@@ -93,7 +112,7 @@ class PolicyValueNet():
 
         # calc policy entropy, for monitoring only
         self.entropy = tf.negative(tf.reduce_mean(
-                tf.reduce_sum(tf.exp(self.action_fc) * self.action_fc, 1)))
+            tf.reduce_sum(tf.exp(self.action_fc) * self.action_fc, 1)))
 
         # Initialize variables
         init = tf.global_variables_initializer()
@@ -110,9 +129,9 @@ class PolicyValueNet():
         output: a batch of action probabilities and state values
         """
         log_act_probs, value = self.session.run(
-                [self.action_fc, self.evaluation_fc2],
-                feed_dict={self.input_states: state_batch}
-                )
+            [self.action_fc, self.value_fc2],
+            feed_dict={self.input_states: state_batch}
+        )
         act_probs = np.exp(log_act_probs)
         return act_probs, value
 
@@ -124,7 +143,7 @@ class PolicyValueNet():
         """
         legal_positions = board.availables
         current_state = np.ascontiguousarray(board.current_state().reshape(
-                -1, 4, self.board_width, self.board_height))
+            -1, 4, self.board_width, self.board_height))
         act_probs, value = self.policy_value(current_state)
         act_probs = (legal_positions, act_probs[0][legal_positions])
         return act_probs, value
@@ -133,11 +152,11 @@ class PolicyValueNet():
         """perform a training step"""
         winner_batch = np.reshape(winner_batch, (-1, 1))
         loss, entropy, _ = self.session.run(
-                [self.loss, self.entropy, self.optimizer],
-                feed_dict={self.input_states: state_batch,
-                           self.mcts_probs: mcts_probs,
-                           self.labels: winner_batch,
-                           self.learning_rate: lr})
+            [self.loss, self.entropy, self.optimizer],
+            feed_dict={self.input_states: state_batch,
+                       self.mcts_probs: mcts_probs,
+                       self.labels: winner_batch,
+                       self.learning_rate: lr})
         return loss, entropy
 
     def save_model(self, model_path):
