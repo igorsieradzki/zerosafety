@@ -17,7 +17,7 @@ from src.game import Board, Game
 from src.mcts_pure import MCTSPlayer as MCTS_Pure
 from src.mcts_alphaZero import MCTSPlayer
 from src.policy_value_net_tensorflow import PolicyValueNet
-from src.nn_utils import lr_schedule
+from src.nn_utils import lr_schedule, augument_data
 
 
 class TrainPipeline():
@@ -30,7 +30,7 @@ class TrainPipeline():
                  n_playouts=400,
                  batch_size=512,
                  train_steps=5,
-                 check_freq=50,
+                 check_freq=100,
                  n_iters=1500,
                  save_dir=None):
 
@@ -85,28 +85,6 @@ class TrainPipeline():
                                       n_playout=self.n_playouts,
                                       is_selfplay=True)
 
-    def get_equi_data(self, states, probs, winners):
-        """augment the data set by rotation and flipping
-        play_data: [(state, mcts_prob, winner_z), ..., ...]
-        """
-        # state rotation
-        states = np.concatenate([np.rot90(states, k=i, axes=(2,3)) for i in range(1,5)], axis=0)
-        # state horizontal flip
-        states = np.concatenate([states, np.flip(states, axis=3)], axis=0)
-
-        # reshape with flipping due to dumb original move encoding, see game.py:33
-        reshaped_probs = np.flip(probs.reshape(-1, self.board_height, self.board_width), axis=1)
-        # probs rotation
-        probs = np.concatenate([np.rot90(reshaped_probs, k=i, axes=(1,2)) for i in range(1,5)], axis=0)
-        # probs horizontal flip
-        probs = np.concatenate([probs, np.flip(probs, axis=2)], axis=0)
-        # reshape the probs back
-        probs = np.reshape(np.flip(probs, axis=1), (-1, self.board_height*self.board_width))
-
-        winners = np.tile(winners, 8)
-
-        return states, probs, winners
-
     def collect_selfplay_data(self, n_games=1):
         """collect self-play data for training"""
         for i in range(n_games):
@@ -115,7 +93,9 @@ class TrainPipeline():
             self.episode_len = states.shape[0]
             # augment the data
 
-            states, probs, winners = self.get_equi_data(states, probs, winners)
+            states, probs, winners = augument_data(states, probs, winners,
+                                                   board_width=self.board_width,
+                                                   board_height=self.board_height)
             self.states_buffer.extend(states)
             self.probs_buffer.extend(probs)
             self.winners_buffer.extend(winners)
@@ -216,7 +196,10 @@ class TrainPipeline():
                 start = time()
                 self.collect_selfplay_data(self.play_batch_size)
                 mcts_time = time() - start
-                logger.info("iter: {}, episode_len:{}, mean time: {:.2f}".format(i + 1, self.episode_len, mean_iter_time))
+                logger.info("iter: {}, episode_len:{}, mcts time: {:.2f}, mean time: {:.2f}".format(i + 1,
+                                                                                                    self.episode_len,
+                                                                                                    mcts_time,
+                                                                                                    mean_iter_time))
 
                 if len(self.states_buffer) > self.batch_size:
                     loss, entropy = self.policy_update(learning_rate=schedule(i))
@@ -229,7 +212,8 @@ class TrainPipeline():
                 if (i+1) % self.check_freq == 0:
                     logger.info("current self-play batch: {}, evaluating...".format(i+1))
                     win_ratio = self.policy_evaluate()
-                    self.policy_value_net.save_model(os.path.join(self.save_dir, 'current_policy.model'))
+                    self.policy_value_net.save_model(os.path.join(self.save_dir, 'policy_{}.model'.format(i+1)))
+
                     if win_ratio > self.best_win_ratio:
                         logger.info("Found new best policy, saving")
                         self.best_win_ratio = win_ratio

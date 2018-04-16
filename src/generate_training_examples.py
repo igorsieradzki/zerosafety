@@ -12,15 +12,15 @@ import numpy as np
 
 parser = argparse.ArgumentParser(description='Generate training examples for learning to teach.')
 
-parser.add_argument('--n_examples', '-ne', nargs=1, type=int, required=True, help='A number of training examples to generate')
-parser.add_argument('--init_model', '-im', nargs=1, type=str, default='best_policy.model',
+parser.add_argument('--n_examples', '-ne', type=int, required=True, help='A number of training examples to generate')
+parser.add_argument('--init_model', '-im', type=str, default='best_policy.model',
                     help='A name of a model to use. If not specified, then the "best_policy.model" is uded')
-parser.add_argument('--board_width', '-bw', nargs=1, type=int, default=6, help='A board width')
-parser.add_argument('--board_height', '-bh', nargs=1, type=int,  default=6, help='A board height')
-parser.add_argument('--n_in_row', '-nr', nargs=1, type=int, default=4, help='A game objective')
-parser.add_argument('--c_puct', '-cp', nargs=1, type=float, default=5., help='A c_puct hyperparameter')
-parser.add_argument('--n_playout', '-np', nargs=1, type=int, default=400, help='A number of playouts in MCTS')
-parser.add_argument('--temperature', '-t', nargs=1, type=float, default=3, help='An initial temperature')
+parser.add_argument('--board_width', '-bw', type=int, default=6, help='A board width')
+parser.add_argument('--board_height', '-bh', type=int,  default=6, help='A board height')
+parser.add_argument('--n_in_row', '-nr', type=int, default=4, help='A game objective')
+parser.add_argument('--c_puct', '-cp', type=float, default=5., help='A c_puct hyperparameter')
+parser.add_argument('--n_playout', '-np', type=int, default=400, help='A number of playouts in MCTS')
+parser.add_argument('--temperature', '-t', type=float, default=1e-3, help='An initial temperature')
 
 
 args = parser.parse_args()
@@ -29,6 +29,8 @@ if args.init_model == 'best_policy.model':
     files.sort()
     most_recent = files[-1]
     args.init_model = os.path.join(results_dir, most_recent, 'best_policy.model')
+else:
+    args.init_model = os.path.join(results_dir, args.init_model)
     
 logger.info(args)
 board = Board(width=args.board_width, height=args.board_height, n_in_row=args.n_in_row)
