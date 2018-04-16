@@ -31,7 +31,8 @@ class TrainPipeline():
                  batch_size=512,
                  train_steps=5,
                  check_freq=50,
-                 n_iters=1500):
+                 n_iters=1500,
+                 save_dir=None):
 
         # params of the board and the game
         self.board_width = board_width
@@ -68,6 +69,8 @@ class TrainPipeline():
         # the opponent to evaluate the trained policy
         self.pure_mcts_playout_num = 1000
 
+        self.save_dir = save_dir
+
         if init_model:
             # start training from an initial policy-value net
             self.policy_value_net = PolicyValueNet(self.board_width,
@@ -80,7 +83,7 @@ class TrainPipeline():
         self.mcts_player = MCTSPlayer(self.policy_value_net.policy_value_fn,
                                       c_puct=self.c_puct,
                                       n_playout=self.n_playouts,
-                                      is_selfplay=1)
+                                      is_selfplay=True)
 
     def get_equi_data(self, states, probs, winners):
         """augment the data set by rotation and flipping
@@ -183,7 +186,9 @@ class TrainPipeline():
         """
         current_mcts_player = MCTSPlayer(self.policy_value_net.policy_value_fn,
                                          c_puct=self.c_puct,
-                                         n_playout=self.n_playouts)
+                                         n_playout=self.n_playouts,
+                                         is_selfplay=False)
+
         pure_mcts_player = MCTS_Pure(c_puct=5,
                                      n_playout=self.pure_mcts_playout_num)
         win_cnt = defaultdict(int)
@@ -201,17 +206,9 @@ class TrainPipeline():
 
     def run(self):
 
-        # create save dir for this run
-        now = datetime.now()
-        save_dir = os.path.join(results_dir, "{day}_{m}_{h}:{min}".format(day=now.day,
-                                                                          m=now.month,
-                                                                          h=now.hour,
-                                                                          min=now.minute))
-
-        os.makedirs(save_dir)
-        mean_iter_time = 0
-
+        times = deque(maxlen=10)
         schedule = lr_schedule()
+        mean_iter_time = 0
 
         # run the training pipeline
         try:
@@ -224,19 +221,20 @@ class TrainPipeline():
                 if len(self.states_buffer) > self.batch_size:
                     loss, entropy = self.policy_update(learning_rate=schedule(i))
 
-                mean_iter_time += ((time() - start) - mean_iter_time) / (i + 1)
+                times.append(time() - start)
+                mean_iter_time = sum(times) / 10
 
                 # check the performance of the current model,
                 # and save the model params
                 if (i+1) % self.check_freq == 0:
                     logger.info("current self-play batch: {}, evaluating...".format(i+1))
                     win_ratio = self.policy_evaluate()
-                    self.policy_value_net.save_model(os.path.join(save_dir, 'current_policy.model'))
+                    self.policy_value_net.save_model(os.path.join(self.save_dir, 'current_policy.model'))
                     if win_ratio > self.best_win_ratio:
                         logger.info("Found new best policy, saving")
                         self.best_win_ratio = win_ratio
                         # update the best_policy
-                        self.policy_value_net.save_model(os.path.join(save_dir, 'best_policy.model'))
+                        self.policy_value_net.save_model(os.path.join(self.save_dir, 'best_policy.model'))
                         if (self.best_win_ratio == 1.0 and
                                     self.pure_mcts_playout_num < 5000):
                             self.pure_mcts_playout_num += 1000
@@ -245,7 +243,7 @@ class TrainPipeline():
         except KeyboardInterrupt:
             logger.warning('Got keyboard interrupt, saving and quiting')
             try:
-                self.policy_value_net.save_model(os.path.join(save_dir, 'current_policy.model'))
+                self.policy_value_net.save_model(os.path.join(self.save_dir, 'current_policy.model'))
             except:
                 logger.error("[!] Error while saving policy net on keyboard interrupt, quiting")
 

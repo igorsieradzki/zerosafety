@@ -10,7 +10,6 @@ from src import logger
 import numpy as np
 import copy
 
-import pdb
 
 def softmax(x):
     probs = np.exp(x - np.max(x))
@@ -25,13 +24,15 @@ class TreeNode(object):
     its visit-count-adjusted prior score u.
     """
 
-    def __init__(self, parent, prior_p):
+    def __init__(self, parent, prior_p, self_play=True):
         self._parent = parent
         self._children = {}  # a map from action to TreeNode
         self._n_visits = 0
         self._Q = 0
         self._u = 0
         self._P = prior_p
+
+        self.self_play = self_play
 
     def expand(self, moves, probs):
         """Expand tree by creating new children.
@@ -44,9 +45,10 @@ class TreeNode(object):
 
         for eps, action, prob in zip(explor_noise, moves, probs):
             if action not in self._children:
-                if self.is_root():
+                if self.is_root() and self.self_play:
                     prob = 0.75 * prob + 0.25 * eps
-                self._children[action] = TreeNode(self, prob)
+
+                self._children[action] = TreeNode(parent=self, prior_p=prob, self_play=self.self_play)
 
     def select(self, c_puct):
         """Select action among children that gives maximum action value Q
@@ -95,7 +97,7 @@ class TreeNode(object):
 class MCTS(object):
     """An implementation of Monte Carlo Tree Search."""
 
-    def __init__(self, policy_value_fn, c_puct=5, n_playout=10000):
+    def __init__(self, policy_value_fn, c_puct=5, n_playout=10000, self_play=True):
         """
         policy_value_fn: a function that takes in a board state and outputs
             a list of (action, probability) tuples and also a score in [-1, 1]
@@ -105,10 +107,11 @@ class MCTS(object):
             converges to the maximum-value policy. A higher value means
             relying on the prior more.
         """
-        self._root = TreeNode(None, 1.0)
+        self._root = TreeNode(parent=None, prior_p=1.0, self_play=self_play)
         self._policy = policy_value_fn
         self._c_puct = c_puct
         self._n_playout = n_playout
+        self.self_play = self_play
 
     def _playout(self, state):
         """Run a single playout from the root to the leaf, getting a value at
@@ -170,7 +173,7 @@ class MCTS(object):
             self._root = self._root._children[last_move]
             self._root._parent = None
         else:
-            self._root = TreeNode(None, 1.0)
+            self._root = TreeNode(parent=None, prior_p=1.0, self_play=self.self_play)
 
     def __str__(self):
         return "MCTS"
@@ -179,10 +182,18 @@ class MCTS(object):
 class MCTSPlayer(object):
     """AI player based on MCTS"""
 
-    def __init__(self, policy_value_function,
-                 c_puct=5, n_playout=2000, is_selfplay=0):
-        self.mcts = MCTS(policy_value_function, c_puct, n_playout)
+    def __init__(self,
+                 policy_value_function,
+                 c_puct=5,
+                 n_playout=2000,
+                 is_selfplay=False):
+
         self._is_selfplay = is_selfplay
+
+        self.mcts = MCTS(policy_value_fn=policy_value_function,
+                         c_puct=c_puct,
+                         n_playout=n_playout,
+                         self_play=is_selfplay)
 
     def set_player_ind(self, p):
         self.player = p
@@ -198,25 +209,12 @@ class MCTSPlayer(object):
             actions, probs = self.mcts.get_move_probs(board, temp)
             move_probs[list(actions)] = probs
 
+            move = np.random.choice(actions, p=probs)
+
             if self._is_selfplay:
-
-                # this is the previous dirichlet noise which is wrong, leaving in here if case the change breaks everything
-
-                # # add Dirichlet Noise for exploration (needed for
-                # # self-play training)
-                # move = np.random.choice(
-                #     acts,
-                #     p=0.75*probs + 0.25*np.random.dirichlet(0.3*np.ones(len(probs)))
-                # )
-
-                move = np.random.choice(actions, p=probs)
-
                 # update the root node and reuse the search tree
                 self.mcts.update_with_move(move)
             else:
-                # with the default temp=1e-3, it is almost equivalent
-                # to choosing the move with the highest prob
-                move = np.random.choice(actions, p=probs)
                 # reset the root node
                 self.mcts.update_with_move(-1)
 #                location = board.move_to_location(move)
