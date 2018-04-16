@@ -178,6 +178,31 @@ class MCTS(object):
     def __str__(self):
         return "MCTS"
 
+    def get_height(self):
+        queue = [(self._root, 0)]
+        tree_height = 0
+        while queue:
+            node, height = queue.pop(0)
+            if height > tree_height:
+                tree_height = height
+            for child in node._children.values():
+                queue.append((child, height+1))
+        return tree_height
+
+    def get_size(self):
+        queue = [self._root]
+        tree_size = 1
+        while queue:
+            node = queue.pop(0)
+            for child in node._children.values():
+                if not child.is_leaf():
+                    tree_size += 1
+                queue.append(child)
+        return tree_size
+
+
+
+
 
 class MCTSPlayer(object):
     """AI player based on MCTS"""
