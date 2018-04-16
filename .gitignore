@@ -9,3 +9,4 @@ __*
 results/
 data/
 .env
+*.swp
