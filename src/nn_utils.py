@@ -1,5 +1,9 @@
-import tensorflow as tf
 
+from src import data_dir
+
+import tensorflow as tf
+import numpy as np
+import os
 
 
 def alpha_zero_residual_block(inputs, filters=64, kernel_size=(3, 3), activation=tf.nn.relu):
@@ -57,6 +61,147 @@ class lr_schedule(object):
         for i, lr in self.intervals.items():
             if iter < i:
                 return lr
+
+
+def load_data(file_name):
+    data = np.load(os.path.join(data_dir, file_name))
+
+    return data['args'], data['states'], data['probs'], data['winners']
+
+
+class Dataset(object):
+    def __init__(self,
+                 file_name: str,
+                 default_bs: int,
+                 shuffle: bool = True,
+                 seed: int = 42):
+
+        self.file_name = file_name
+
+        self.default_bs = default_bs
+        self.shuffle = shuffle
+
+        self._load()
+
+        self.current_epoch = 0
+        self.index_in_epoch = 0
+
+        self.seed = seed
+        self.rng = np.random.RandomState(seed)
+
+    @property
+    def n_samples(self):
+        return len(self.data)
+
+    @property
+    def batch_size(self):
+        return self.default_bs
+
+    @property
+    def batches_in_epoch(self):
+        return (self.n_samples // self.default_bs) + 1
+
+    @property
+    def current_batch_in_epoch(self):
+        return (self.index_in_epoch // self.default_bs) + 1
+
+    def get_progress(self):
+        return "Epoch: [{0:2d}] [{1:4d}/{2:4d}]".format(self.current_epoch,
+                                                        self.current_batch_in_epoch,
+                                                        self.batches_in_epoch, )
+
+    def _load(self):
+        args, states, probs, winners = load_data()
+        states, probs, winners = augument_data(states=states, probs=probs, winners=winners,
+                                               board_height=args['board_height'], board_width=args['board_width'])
+
+        self.states = states
+        self.probs = probs
+        self.winners = winners
+
+
+    def _get_data(self, ids):
+        return self.states[ids], self.probs[ids], self.winners[ids]
+
+    def next_batch(self, batch_size=None):
+        """
+        Get next batch
+        :param batch_size:
+        :return:
+        """
+
+        if batch_size is None:
+            batch_size = self.default_bs
+
+        # first batch
+        if self.current_epoch == 0 and self.index_in_epoch == 0:
+            self._reset()
+
+        # last batch in epoch:
+        if self.index_in_epoch + batch_size > self.n_samples:
+            self.current_epoch += 1
+            n_rest_sampels = self.n_samples - self.index_in_epoch
+            rest_indices = self.indices[-n_rest_sampels:]
+
+            self._reset()
+            n_new_samples = batch_size - n_rest_sampels
+            new_indices = self.indices[:n_new_samples]
+            self.index_in_epoch = n_new_samples
+
+            rest_states, rest_probs, rest_winners = self._get_data(rest_indices)
+            new_states, new_probs, new_winners = self._get_data(new_indices)
+
+            if n_rest_sampels == 0:
+                x = (new_states, new_probs, new_winners)
+            else:
+                states = np.concatenate([rest_states, new_states], axis=0)
+                probs = np.concatenate([rest_probs, new_probs], axis=0)
+                winners = np.concatenate([rest_winners, new_winners], axis=0)
+                x = (states, probs, winners)
+
+        else:
+            start = self.index_in_epoch
+            stop = self.index_in_epoch + batch_size
+            batch_indices = self.indices[start:stop]
+            x = self._get_data(batch_indices)
+            self.index_in_epoch += batch_size
+
+        return x
+
+    def _reset(self):
+        """
+        Reset after an epoch
+        :return:
+        """
+        self.index_in_epoch = 0
+        self.indices = np.arange(self.n_samples)
+
+        if self.shuffle:
+            self.rng.shuffle(self.indices)
+
+
+
+def augument_data(states, probs, winners, board_height, board_width):
+    """augment the data set by rotation and flipping
+    play_data: [(state, mcts_prob, winner_z), ..., ...]
+    """
+    # state rotation
+    states = np.concatenate([np.rot90(states, k=i, axes=(2,3)) for i in range(1,5)], axis=0)
+    # state horizontal flip
+    states = np.concatenate([states, np.flip(states, axis=3)], axis=0)
+
+    # reshape with flipping due to dumb original move encoding, see game.py:33
+    reshaped_probs = np.flip(probs.reshape(-1, board_height, board_width), axis=1)
+    # probs rotation
+    probs = np.concatenate([np.rot90(reshaped_probs, k=i, axes=(1,2)) for i in range(1,5)], axis=0)
+    # probs horizontal flip
+    probs = np.concatenate([probs, np.flip(probs, axis=2)], axis=0)
+    # reshape the probs back
+    probs = np.reshape(np.flip(probs, axis=1), (-1, board_height*board_width))
+
+    winners = np.tile(winners, 8)
+
+    return states, probs, winners
 
 
 
