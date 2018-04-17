@@ -5,6 +5,8 @@ An implementation of the training pipeline of AlphaZero for Gomoku
 @author: Junxiao Song
 """
 
+import pdb
+
 from datetime import datetime
 from time import time
 import os
@@ -19,6 +21,8 @@ from src.mcts_alphaZero import MCTSPlayer
 from src.policy_value_net_tensorflow import PolicyValueNet
 from src.nn_utils import lr_schedule, augument_data
 
+import pdb
+
 
 class TrainPipeline():
     def __init__(self,
@@ -32,7 +36,8 @@ class TrainPipeline():
                  train_steps=5,
                  check_freq=100,
                  n_iters=1500,
-                 save_dir=None):
+                 save_dir=None,
+                 debug=False):
 
         # params of the board and the game
         self.board_width = board_width
@@ -70,6 +75,7 @@ class TrainPipeline():
         self.pure_mcts_playout_num = 1000
 
         self.save_dir = save_dir
+        self.debug = debug
 
         if init_model:
             # start training from an initial policy-value net
@@ -80,6 +86,7 @@ class TrainPipeline():
             # start training from a new policy-value net
             self.policy_value_net = PolicyValueNet(self.board_width,
                                                    self.board_height)
+
         self.mcts_player = MCTSPlayer(self.policy_value_net.policy_value_fn,
                                       c_puct=self.c_puct,
                                       n_playout=self.n_playouts,
@@ -93,12 +100,13 @@ class TrainPipeline():
             self.episode_len = states.shape[0]
             # augment the data
 
-            states, probs, winners = augument_data(states, probs, winners,
+            aug_states, aug_probs, aug_winners = augument_data(states, probs, winners,
                                                    board_width=self.board_width,
                                                    board_height=self.board_height)
-            self.states_buffer.extend(states)
-            self.probs_buffer.extend(probs)
-            self.winners_buffer.extend(winners)
+
+            self.states_buffer.extend(aug_states)
+            self.probs_buffer.extend(aug_probs)
+            self.winners_buffer.extend(aug_winners)
 
     def policy_update(self, learning_rate):
         """update the policy-value net"""
@@ -205,7 +213,7 @@ class TrainPipeline():
                     loss, entropy = self.policy_update(learning_rate=schedule(i))
 
                 times.append(time() - start)
-                mean_iter_time = sum(times) / 10
+                mean_iter_time = sum(times) / len(times)
 
                 # check the performance of the current model,
                 # and save the model params

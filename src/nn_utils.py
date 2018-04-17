@@ -186,18 +186,18 @@ def augument_data(states, probs, winners, board_height, board_width):
     play_data: [(state, mcts_prob, winner_z), ..., ...]
     """
     # state rotation
-    states = np.concatenate([np.rot90(states, k=i, axes=(2,3)) for i in range(1,5)], axis=0)
+    states = np.concatenate([np.rot90(states, k=i, axes=(1,2)) for i in range(4)], axis=0)
     # state horizontal flip
-    states = np.concatenate([states, np.flip(states, axis=3)], axis=0)
+    states = np.concatenate([states, np.flip(states, axis=2)], axis=0)
 
-    # reshape with flipping due to dumb original move encoding, see game.py:33
-    reshaped_probs = np.flip(probs.reshape(-1, board_height, board_width), axis=1)
+    # reshape
+    reshaped_probs = probs.reshape(-1, board_height, board_width)
     # probs rotation
-    probs = np.concatenate([np.rot90(reshaped_probs, k=i, axes=(1,2)) for i in range(1,5)], axis=0)
+    probs = np.concatenate([np.rot90(reshaped_probs, k=i, axes=(1,2)) for i in range(4)], axis=0)
     # probs horizontal flip
     probs = np.concatenate([probs, np.flip(probs, axis=2)], axis=0)
     # reshape the probs back
-    probs = np.reshape(np.flip(probs, axis=1), (-1, board_height*board_width))
+    probs = np.reshape(probs, (-1, board_height*board_width))
 
     winners = np.tile(winners, 8)
 

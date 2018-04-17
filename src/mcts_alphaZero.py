@@ -157,13 +157,17 @@ class MCTS(object):
             self._playout(state_copy)
 
         # calc the move probabilities based on visit counts at the root node
-        act_visits = [(act, node._n_visits)
-                      for act, node in self._root._children.items()]
+        # act_visits = [(act, node._n_visits)
+        #               for act, node in self._root._children.items()]
+        #
+        # acts, visits = zip(*act_visits)
 
-        acts, visits = zip(*act_visits)
-        act_probs = softmax((1.0/temp) * np.log(np.array(visits) + 1e-10))
+        actions = list(self._root._children.keys())
+        visits = [node._n_visits for node in self._root._children.values()]
 
-        return acts, act_probs
+        probs = softmax((1.0 / temp) * np.log(np.array(visits) + 1e-10))
+
+        return actions, probs
 
     def update_with_move(self, last_move):
         """Step forward in the tree, keeping everything we already know
@@ -207,8 +211,8 @@ class MCTSPlayer(object):
         move_probs = np.zeros(board.width * board.height)
         if len(sensible_moves) > 0:
             actions, probs = self.mcts.get_move_probs(board, temp)
-            move_probs[list(actions)] = probs
 
+            move_probs[actions] = probs
             move = np.random.choice(actions, p=probs)
 
             if self._is_selfplay:
