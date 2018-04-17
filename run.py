@@ -20,6 +20,7 @@ flags.DEFINE_integer("train_steps", 5, "number of train steps for polic/value ne
 flags.DEFINE_integer("check_freq", 50, "after how many iteratons to evaluate")
 flags.DEFINE_integer("iters", 1500, "number of training iterations")
 flags.DEFINE_string("save_dir", None, "dir to save the model in")
+flags.DEFINE_boolean("debug", False, "Debug mode")
 
 FLAGS = flags.FLAGS
 
@@ -38,11 +39,11 @@ def main(_):
     else:
         save_dir = FLAGS.save_dir
 
-    if not os.path.exists(save_dir):
+    if not os.path.exists(save_dir) and not FLAGS.debug:
         os.makedirs(save_dir)
 
-    with open(os.path.join(save_dir, "params.txt"), 'w+') as file:
-        pprint(flags.FLAGS.__flags, stream=file)
+        with open(os.path.join(save_dir, "params.txt"), 'w+') as file:
+            pprint(flags.FLAGS.__flags, stream=file)
 
     training_pipeline = TrainPipeline(init_model=FLAGS.model,
                                       board_width=FLAGS.board_width,
