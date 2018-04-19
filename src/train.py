@@ -77,6 +77,8 @@ class TrainPipeline():
         self.save_dir = save_dir
         self.debug = debug
 
+        self.save_freq = 100
+
         if init_model:
             # start training from an initial policy-value net
             self.policy_value_net = PolicyValueNet(self.board_width,
@@ -151,7 +153,7 @@ class TrainPipeline():
                              np.var(np.array(winner_batch) - new_v.flatten()) /
                              np.var(np.array(winner_batch)))
 
-        update_time = time()- start
+        update_time = time() - start
 
         logger.debug(("kl:{:.3f}, "
                       "loss:{:.3f}, "
@@ -160,7 +162,7 @@ class TrainPipeline():
                       "explained_var_new:{:.3f}, "
                       "time: {:.2f}"
                       ).format(kl,
-                               loss,
+                               np.mean(loss),
                                entropy,
                                explained_var_old,
                                explained_var_new,
@@ -215,12 +217,13 @@ class TrainPipeline():
                 times.append(time() - start)
                 mean_iter_time = sum(times) / len(times)
 
+                if i + 1 % self.save_freq == 0 and not self.debug:
+                    self.policy_value_net.save_model(os.path.join(self.save_dir, 'policy_{}.model'.format(i + 1)))
+
                 # check the performance of the current model,
-                # and save the model params
                 if (i+1) % self.check_freq == 0:
                     logger.info("current self-play batch: {}, evaluating...".format(i+1))
                     win_ratio = self.policy_evaluate()
-                    self.policy_value_net.save_model(os.path.join(self.save_dir, 'policy_{}.model'.format(i+1)))
 
                     if win_ratio > self.best_win_ratio:
                         logger.info("Found new best policy, saving")
@@ -235,7 +238,8 @@ class TrainPipeline():
         except KeyboardInterrupt:
             logger.warning('Got keyboard interrupt, saving and quiting')
             try:
-                self.policy_value_net.save_model(os.path.join(self.save_dir, 'current_policy.model'))
+                if not self.debug:
+                    self.policy_value_net.save_model(os.path.join(self.save_dir, 'current_policy.model'))
             except:
                 logger.error("[!] Error while saving policy net on keyboard interrupt, quiting")
 
