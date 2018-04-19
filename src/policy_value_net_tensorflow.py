@@ -14,12 +14,15 @@ from src.nn_utils import alpha_zero_conv_block, alpha_zero_residual_block
 
 class PolicyValueNet():
 
-    def __init__(self, board_width, board_height, model_file=None, n_res_blocks=9):
+    def __init__(self,
+                 board_width,
+                 board_height,
+                 model_file=None,
+                 arch='resnet',
+                 n_res_blocks=9):
 
         # TODO: add savedir
         # TODO: refactor the class:
-        #  - create builders,
-        #  - change loss calculation
         #  - add summaries
         #  - check all the methods, are all of them necessary?
 
@@ -27,6 +30,9 @@ class PolicyValueNet():
         self.board_width = board_width
         self.board_height = board_height
 
+        assert arch in ['resnet', 'orginal']
+
+        self.arch = arch
         self.n_res_blocks = n_res_blocks
 
         self.l2_penalty_beta = 1e-4
@@ -34,17 +40,58 @@ class PolicyValueNet():
         self.learning_rate = tf.placeholder(tf.float32)
         self.input_states = tf.placeholder(tf.float32, shape=[None, self.board_height, self.board_width, 4])
 
-        self._res_net_builder()
+        if self.arch == 'resnet':
+            self._res_net_builder()
+        else:
+            self._original_builder()
+
+        # Define the Loss function
+        # 1. Label: the array containing if the game wins or not for each state
+        self.labels = tf.placeholder(tf.float32, shape=[None, 1])
+
+        # 3-1. Value Loss function
+        self.value_loss = tf.losses.mean_squared_error(self.labels, self.value_out)
+
+        # 3-2. Policy Loss function
+        self.mcts_probs = tf.placeholder(tf.float32, shape=[None, self.board_height * self.board_width])
+        # self.policy_loss = tf.negative(
+        #     tf.reduce_mean(tf.reduce_sum(tf.multiply(self.mcts_probs, self.probs_out), 1)))
+
+        self.policy_loss = tf.nn.softmax_cross_entropy_with_logits(labels=self.mcts_probs, logits=self.probs_out)
+
+        # 3-3. L2 penalty (regularization)
+        vars = tf.trainable_variables()
+        l2_penalty = self.l2_penalty_beta * tf.add_n(
+            [tf.nn.l2_loss(v) for v in vars if 'bias' not in v.name.lower()])
+        # 3-4 Add up to be the Loss function
+        self.loss = self.value_loss + self.policy_loss + l2_penalty
+
+        # calc policy entropy, for monitoring only
+        self.entropy = tf.negative(tf.reduce_mean(tf.reduce_sum(self.probs_out * tf.log(self.probs_out), 1)))
+
+        if self.arch == 'resnet':
+            self.optimizer = tf.train.MomentumOptimizer(learning_rate=self.learning_rate, momentum=0.9)
+            update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
+            with tf.control_dependencies(update_ops):
+                self.train_op = self.optimizer.minimize(self.loss)
+        else:
+            self.optimizer = tf.train.AdamOptimizer(learning_rate=self.learning_rate)
+            self.train_op = self.optimizer.minimize(self.loss)
+
 
         # summaries for tensorboard
         # TODO: add summaries
+
+        # Make a session
+        gpu_options = tf.GPUOptions(allow_growth=True)
+        self.session = tf.Session(config=tf.ConfigProto(gpu_options=gpu_options))
 
         # Initialize variables
         init = tf.global_variables_initializer()
         self.session.run(init)
 
         # For saving and restoring
-        self.saver = tf.train.Saver()
+        self.saver = tf.train.Saver(max_to_keep=50)
         if model_file is not None:
             self.restore_model(model_file)
 
@@ -70,9 +117,12 @@ class PolicyValueNet():
         self.action_conv_flat = tf.reshape(self.action_conv, [-1, 2 * self.board_height * self.board_width])
         # 3-2 Full connected layer, the output is the log probability of moves
         # on each slot on the board
-        self.action_fc = tf.layers.dense(inputs=self.action_conv_flat,
-                                         units=self.board_height * self.board_width,
-                                         activation=tf.nn.log_softmax)
+        self.logits_out = tf.layers.dense(inputs=self.action_conv_flat,
+                                          units=self.board_height * self.board_width,
+                                          activation=None)
+
+        self.probs_out = tf.nn.softmax(self.logits_out)
+
         # 4 Evaluation Networks
         value_conv = tf.layers.conv2d(out,
                                       filters=1,
@@ -86,39 +136,9 @@ class PolicyValueNet():
         self.value_fc1 = tf.layers.dense(inputs=self.value_conv_flat, units=64, activation=tf.nn.relu)
 
         # output the score of evaluation on current state
-        self.value_fc2 = tf.layers.dense(inputs=self.value_fc1,
+        self.value_out = tf.layers.dense(inputs=self.value_fc1,
                                          units=1,
                                          activation=tf.nn.tanh)
-
-        # Define the Loss function
-        # 1. Label: the array containing if the game wins or not for each state
-        self.labels = tf.placeholder(tf.float32, shape=[None, 1])
-
-        # 2. Predictions: the array containing the evaluation score of each state
-        # which is self.evaluation_fc2
-        # 3-1. Value Loss function
-        self.value_loss = tf.losses.mean_squared_error(self.labels, self.value_fc2)
-
-        # 3-2. Policy Loss function
-        self.mcts_probs = tf.placeholder(tf.float32, shape=[None, self.board_height * self.board_width])
-        self.policy_loss = tf.negative(tf.reduce_mean(tf.reduce_sum(tf.multiply(self.mcts_probs, self.action_fc), 1)))
-
-        # 3-3. L2 penalty (regularization)
-        vars = tf.trainable_variables()
-        l2_penalty = self.l2_penalty_beta * tf.add_n([tf.nn.l2_loss(v) for v in vars if 'bias' not in v.name.lower()])
-        # 3-4 Add up to be the Loss function
-        self.loss = self.value_loss + self.policy_loss + l2_penalty
-
-        update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
-        with tf.control_dependencies(update_ops):
-            self.optimizer = tf.train.MomentumOptimizer(learning_rate=self.learning_rate, momentum=0.9).minimize(self.loss)
-
-        # Make a session
-        gpu_options = tf.GPUOptions(allow_growth=True)
-        self.session = tf.Session(config=tf.ConfigProto(gpu_options=gpu_options))
-
-        # calc policy entropy, for monitoring only
-        self.entropy = tf.negative(tf.reduce_mean(tf.reduce_sum(tf.exp(self.action_fc) * self.action_fc, 1)))
 
 
     def _original_builder(self):
@@ -142,9 +162,12 @@ class PolicyValueNet():
             self.action_conv, [-1, 4 * self.board_height * self.board_width])
         # 3-2 Full connected layer, the output is the log probability of moves
         # on each slot on the board
-        self.action_fc = tf.layers.dense(inputs=self.action_conv_flat,
-                                         units=self.board_height * self.board_width,
-                                         activation=tf.nn.log_softmax)
+        self.logits_out = tf.layers.dense(inputs=self.action_conv_flat,
+                                          units=self.board_height * self.board_width,
+                                          activation=None)
+
+        self.probs_out = tf.nn.softmax(self.logits_out)
+
         # 4 Evaluation Networks
         self.evaluation_conv = tf.layers.conv2d(inputs=self.conv3, filters=2,
                                                 kernel_size=[1, 1],
@@ -158,37 +181,7 @@ class PolicyValueNet():
         self.evaluation_fc2 = tf.layers.dense(inputs=self.evaluation_fc1,
                                               units=1, activation=tf.nn.tanh)
 
-        # Define the Loss function
-        # 1. Label: the array containing if the game wins or not for each state
-        self.labels = tf.placeholder(tf.float32, shape=[None, 1])
 
-        # 2. Predictions: the array containing the evaluation score of each state
-        # which is self.evaluation_fc2
-        # 3-1. Value Loss function
-        self.value_loss = tf.losses.mean_squared_error(self.labels, self.value_fc2)
-
-        # 3-2. Policy Loss function
-        self.mcts_probs = tf.placeholder(tf.float32, shape=[None, self.board_height * self.board_width])
-        self.policy_loss = tf.negative(tf.reduce_mean(tf.reduce_sum(tf.multiply(self.mcts_probs, self.action_fc), 1)))
-
-        # 3-3. L2 penalty (regularization)
-
-        vars = tf.trainable_variables()
-        l2_penalty = self.l2_penalty_beta * tf.add_n([tf.nn.l2_loss(v) for v in vars if 'bias' not in v.name.lower()])
-        # 3-4 Add up to be the Loss function
-        self.loss = self.value_loss + self.policy_loss + l2_penalty
-
-        # Define the optimizer we use for training
-        self.learning_rate = tf.placeholder(tf.float32)
-        self.optimizer = tf.train.AdamOptimizer(
-            learning_rate=self.learning_rate).minimize(self.loss)
-
-        # Make a session
-        self.session = tf.Session()
-
-        # calc policy entropy, for monitoring only
-        self.entropy = tf.negative(tf.reduce_mean(
-            tf.reduce_sum(tf.exp(self.action_fc) * self.action_fc, 1)))
 
 
     def policy_value(self, state_batch):
@@ -196,11 +189,8 @@ class PolicyValueNet():
         input: a batch of states
         output: a batch of action probabilities and state values
         """
-        log_act_probs, value = self.session.run(
-            [self.action_fc, self.value_fc2],
-            feed_dict={self.input_states: state_batch}
-        )
-        act_probs = np.exp(log_act_probs)
+        act_probs, value = self.session.run([self.probs_out, self.value_out],
+                                            feed_dict={self.input_states: state_batch})
         return act_probs, value
 
     def policy_value_fn(self, board):
@@ -219,7 +209,7 @@ class PolicyValueNet():
         """perform a training step"""
         winner_batch = np.reshape(winner_batch, (-1, 1))
         loss, entropy, _ = self.session.run(
-            [self.loss, self.entropy, self.optimizer],
+            [self.loss, self.entropy, self.train_op],
             feed_dict={self.input_states: state_batch,
                        self.mcts_probs: mcts_probs,
                        self.labels: winner_batch,
