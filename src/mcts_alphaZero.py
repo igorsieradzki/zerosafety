@@ -9,6 +9,7 @@ network to guide the tree search and evaluate the leaf nodes
 from src import logger
 import numpy as np
 import copy
+import networkx as nx
 
 
 def softmax(x):
@@ -44,19 +45,19 @@ class TreeNode(object):
         explor_noise = np.random.dirichlet(0.43 * np.ones(len(probs)))
 
         for eps, action, prob in zip(explor_noise, moves, probs):
-            if action not in self._children:
-                if self.is_root() and self.self_play:
-                    prob = 0.75 * prob + 0.25 * eps
+            if action in self._children:
+                raise Exception('Possible second expand on the same node')
+            if self.is_root() and self.self_play:
+                prob = 0.75 * prob + 0.25 * eps
 
-                self._children[action] = TreeNode(parent=self, prior_p=prob, self_play=self.self_play)
+            self._children[action] = TreeNode(parent=self, prior_p=prob, self_play=self.self_play)
 
     def select(self, c_puct):
         """Select action among children that gives maximum action value Q
         plus bonus u(P).
         Return: A tuple of (action, next_node)
         """
-        return max(self._children.items(),
-                   key=lambda act_node: act_node[1].get_value(c_puct))
+        return max(self._children.items(), key=lambda act_node: act_node[1].get_value(c_puct))
 
     def update(self, leaf_value):
         """Update node values from leaf evaluation.
@@ -108,6 +109,7 @@ class MCTS(object):
             relying on the prior more.
         """
         self._root = TreeNode(parent=None, prior_p=1.0, self_play=self_play)
+        self._prev_root = None
         self._policy = policy_value_fn
         self._c_puct = c_puct
         self._n_playout = n_playout
@@ -174,13 +176,60 @@ class MCTS(object):
         about the subtree.
         """
         if last_move in self._root._children:
+            self._prev_root = self._root
             self._root = self._root._children[last_move]
             self._root._parent = None
         else:
             self._root = TreeNode(parent=None, prior_p=1.0, self_play=self.self_play)
+            self._prev_root = None
 
     def __str__(self):
         return "MCTS"
+
+    def get_height(self):
+        queue = [(self._prev_root, 0)]
+        tree_height = 0
+        while queue:
+            node, height = queue.pop(0)
+            if height > tree_height:
+                tree_height = height
+            for child in node._children.values():
+                queue.append((child, height+1))
+        return tree_height
+
+    def get_size(self):
+        queue = [self._prev_root]
+        tree_size = 1
+        while queue:
+            node = queue.pop(0)
+            for child in node._children.values():
+                if not child.is_leaf():
+                    tree_size += 1
+                queue.append(child)
+        return tree_size
+
+    def create_nx_graph(self):
+        # parent, node are use for mcts tree
+        # nxparent, nxnode are used for networkx tree
+        G = nx.Graph()
+        label = 0
+        nxnode = (-1, int(self._prev_root._P*100)/100, label)
+        label += 1
+        G.add_node(nxnode)
+        queue = [(self._prev_root, nxnode)]
+        while queue:
+            parent, nxparent = queue.pop(0)
+            for action, child in parent._children.items():
+                if not child.is_leaf() or child._Q == 1.:
+                    nxnode = (action, int(child._P*100)/100, label)
+                    label += 1
+                    G.add_node(nxnode)
+                    G.add_edge(nxparent, nxnode)
+                    queue.append((child, nxnode))
+        return G
+
+
+
 
 
 class MCTSPlayer(object):

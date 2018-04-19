@@ -39,14 +39,13 @@ policy_value_net = PolicyValueNet(args.board_width, args.board_height, model_fil
 mcts_player = MCTSPlayer(policy_value_net.policy_value_fn, c_puct=args.c_puct, n_playout=args.n_playout, is_selfplay=1)
 
 states_buf, probs_buf, winners_buf = [], [], []
-n_examples = args.n_examples[0]
-while len(states_buf) < n_examples:
-    _, (states, probs, winners) = game.start_self_play(mcts_player, temp=args.temperature)
+while len(states_buf) < args.n_examples:
+    _, (states, probs, winners) = game.start_self_play(mcts_player, temp=args.temperature, is_shown=1)
     states_buf.extend(states)
     probs_buf.extend(probs)
     winners_buf.extend(winners)
-    logger.info('generated {}/{} examples'.format(len(states_buf), n_examples))
+    logger.info('generated {}/{} examples'.format(len(states_buf), args.n_examples))
 
 now = datetime.now()
 save_file = os.path.join(data_dir, "{day}_{m}_{h}:{min}".format(day=now.day, m=now.month, h=now.hour, min=now.minute))
-np.savez(save_file, **{'args':args, 'states':states_buf[:n_examples], 'probs':probs_buf[:n_examples], 'winners':winners_buf[:n_examples]})
+np.savez(save_file, **{'args':args, 'states':states_buf[:args.n_examples], 'probs':probs_buf[:args.n_examples], 'winners':winners_buf[:args.n_examples]})
