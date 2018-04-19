@@ -208,6 +208,18 @@ class MCTS(object):
                 queue.append(child)
         return tree_size
 
+    def get_tree_width(self):
+        queue = [self._prev_root]
+        tree_width = 0
+        while queue:
+            node = queue.pop(0)
+            if len(node._children) > tree_width:
+                tree_width = len(node._children)
+            for child in node._children.values():
+                queue.append(child)
+        return tree_width
+
+
     def create_nx_graph(self):
         # parent, node are use for mcts tree
         # nxparent, nxnode are used for networkx tree
