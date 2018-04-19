@@ -17,6 +17,7 @@ class PolicyValueNet():
     def __init__(self,
                  board_width,
                  board_height,
+                 name='alpha0',
                  model_file=None,
                  arch='resnet',
                  n_res_blocks=9):
@@ -57,7 +58,7 @@ class PolicyValueNet():
         # self.policy_loss = tf.negative(
         #     tf.reduce_mean(tf.reduce_sum(tf.multiply(self.mcts_probs, self.probs_out), 1)))
 
-        self.policy_loss = tf.nn.softmax_cross_entropy_with_logits(labels=self.mcts_probs, logits=self.probs_out)
+        self.policy_loss = tf.negative(tf.reduce_mean(tf.reduce_sum(tf.multiply(self.mcts_probs, self.probs_out), 1)))
 
         # 3-3. L2 penalty (regularization)
         vars = tf.trainable_variables()
@@ -67,7 +68,7 @@ class PolicyValueNet():
         self.loss = self.value_loss + self.policy_loss + l2_penalty
 
         # calc policy entropy, for monitoring only
-        self.entropy = tf.negative(tf.reduce_mean(tf.reduce_sum(self.probs_out * tf.log(self.probs_out), 1)))
+        self.entropy = tf.negative(tf.reduce_mean(tf.reduce_sum(self.probs_out * tf.log(self.probs_out + 1e-10), 1)))
 
         if self.arch == 'resnet':
             self.optimizer = tf.train.MomentumOptimizer(learning_rate=self.learning_rate, momentum=0.9)
@@ -82,7 +83,6 @@ class PolicyValueNet():
         # summaries for tensorboard
         # TODO: add summaries
 
-        # Make a session
         gpu_options = tf.GPUOptions(allow_growth=True)
         self.session = tf.Session(config=tf.ConfigProto(gpu_options=gpu_options))
 
@@ -94,6 +94,7 @@ class PolicyValueNet():
         self.saver = tf.train.Saver(max_to_keep=50)
         if model_file is not None:
             self.restore_model(model_file)
+
 
     def _res_net_builder(self):
 
@@ -117,11 +118,9 @@ class PolicyValueNet():
         self.action_conv_flat = tf.reshape(self.action_conv, [-1, 2 * self.board_height * self.board_width])
         # 3-2 Full connected layer, the output is the log probability of moves
         # on each slot on the board
-        self.logits_out = tf.layers.dense(inputs=self.action_conv_flat,
+        self.probs_out = tf.layers.dense(inputs=self.action_conv_flat,
                                           units=self.board_height * self.board_width,
-                                          activation=None)
-
-        self.probs_out = tf.nn.softmax(self.logits_out)
+                                          activation=tf.nn.log_softmax)
 
         # 4 Evaluation Networks
         value_conv = tf.layers.conv2d(out,
@@ -182,15 +181,17 @@ class PolicyValueNet():
                                               units=1, activation=tf.nn.tanh)
 
 
-
-
     def policy_value(self, state_batch):
         """
         input: a batch of states
         output: a batch of action probabilities and state values
         """
-        act_probs, value = self.session.run([self.probs_out, self.value_out],
-                                            feed_dict={self.input_states: state_batch})
+        log_act_probs, value = self.session.run(
+            [self.probs_out, self.value_out],
+            feed_dict={self.input_states: state_batch}
+        )
+
+        act_probs = np.exp(log_act_probs)
         return act_probs, value
 
     def policy_value_fn(self, board):

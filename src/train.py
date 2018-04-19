@@ -217,7 +217,7 @@ class TrainPipeline():
                 times.append(time() - start)
                 mean_iter_time = sum(times) / len(times)
 
-                if i + 1 % self.save_freq == 0 and not self.debug:
+                if (i + 1) % self.save_freq == 0 and not self.debug:
                     self.policy_value_net.save_model(os.path.join(self.save_dir, 'policy_{}.model'.format(i + 1)))
 
                 # check the performance of the current model,

@@ -242,6 +242,7 @@ class MCTSPlayer(object):
                  is_selfplay=False):
 
         self._is_selfplay = is_selfplay
+        self.is_human = False
 
         self.mcts = MCTS(policy_value_fn=policy_value_function,
                          c_puct=c_puct,

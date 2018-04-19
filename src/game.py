@@ -4,6 +4,8 @@
 """
 
 import numpy as np
+import os
+import sys
 
 
 class Board(object):
@@ -112,6 +114,27 @@ class Board(object):
     def get_current_player(self):
         return self.current_player
 
+    def move_to_location(self, move):
+        """
+        3*3 board's moves like:
+        6 7 8
+        3 4 5
+        0 1 2
+        and move 5's location is (1,2)
+        """
+        h = move // self.width
+        w = move % self.width
+        return [h, w]
+
+    def location_to_move(self, location):
+        if len(location) != 2:
+            return -1
+        h = location[0]
+        w = location[1]
+        move = h * self.width + w
+        if move not in range(self.width * self.height):
+            return -1
+        return move
 
 class Game(object):
     """game server"""
@@ -130,7 +153,7 @@ class Game(object):
         for x in range(width):
             print("{0:8}".format(x), end='')
         print('\r\n')
-        for i in range(height - 1, -1, -1):
+        for i in range(height):
             print("{0:4d}".format(i), end='')
             for j in range(width):
                 loc = i * width + j
@@ -154,13 +177,19 @@ class Game(object):
         player2.set_player_ind(p2)
         players = {p1: player1, p2: player2}
         if is_shown:
+            os.system('clear')
             self.graphic(self.board, player1.player, player2.player)
         while True:
             current_player = self.board.get_current_player()
             player_in_turn = players[current_player]
+
+            if player_in_turn.is_human and start_player != 0:
+                print("Alpha Zero's last move: {}".format(self.board.move_to_location(move)))
+
             move = player_in_turn.get_action(self.board)
             self.board.do_move(move)
             if is_shown:
+                os.system('clear')
                 self.graphic(self.board, player1.player, player2.player)
             end, winner = self.board.game_end()
             if end:
@@ -198,7 +227,7 @@ class Game(object):
             move_counter += 1
 
             # added change of the temperature used in softmax
-            if move_counter >= 6:
+            if move_counter >= 4:
                 temp = 1e-3
 
             if end:
