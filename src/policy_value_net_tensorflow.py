@@ -68,7 +68,7 @@ class PolicyValueNet():
         self.loss = self.value_loss + self.policy_loss + l2_penalty
 
         # calc policy entropy, for monitoring only
-        self.entropy = tf.negative(tf.reduce_mean(tf.reduce_sum(self.probs_out * tf.log(self.probs_out + 1e-10), 1)))
+        self.entropy = tf.negative(tf.reduce_mean(tf.reduce_sum(tf.exp(self.probs_out) * self.probs_out, 1)))
 
         if self.arch == 'resnet':
             self.optimizer = tf.train.MomentumOptimizer(learning_rate=self.learning_rate, momentum=0.9)

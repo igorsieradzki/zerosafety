@@ -186,6 +186,7 @@ class MCTSPlayer(object):
     """AI player based on MCTS"""
     def __init__(self, c_puct=5, n_playout=2000):
         self.mcts = MCTS(policy_value_fn, c_puct, n_playout)
+        self.is_human = False
 
     def set_player_ind(self, p):
         self.player = p

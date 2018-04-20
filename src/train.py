@@ -158,8 +158,8 @@ class TrainPipeline():
         logger.debug(("kl:{:.3f}, "
                       "loss:{:.3f}, "
                       "entropy:{:.3f}, "
-                      "explained_var_old:{:.3f}, "
-                      "explained_var_new:{:.3f}, "
+                      "explained_var_old:{:.5f}, "
+                      "explained_var_new:{:.5f}, "
                       "time: {:.2f}"
                       ).format(kl,
                                np.mean(loss),

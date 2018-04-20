@@ -20,7 +20,7 @@ parser.add_argument('--board_height', '-bh', type=int,  default=6, help='A board
 parser.add_argument('--n_in_row', '-nr', type=int, default=4, help='A game objective')
 parser.add_argument('--c_puct', '-cp', type=float, default=5., help='A c_puct hyperparameter')
 parser.add_argument('--n_playout', '-np', type=int, default=400, help='A number of playouts in MCTS')
-parser.add_argument('--temperature', '-t', type=float, default=1e-3, help='An initial temperature')
+parser.add_argument('--temperature', '-t', type=float, default=1, help='An initial temperature')
 
 
 args = parser.parse_args()
@@ -31,21 +31,35 @@ if args.init_model == 'best_policy.model':
     args.init_model = os.path.join(results_dir, most_recent, 'best_policy.model')
 else:
     args.init_model = os.path.join(results_dir, args.init_model)
-    
+
 logger.info(args)
 board = Board(width=args.board_width, height=args.board_height, n_in_row=args.n_in_row)
 game = Game(board)
 policy_value_net = PolicyValueNet(args.board_width, args.board_height, model_file=args.init_model)
 mcts_player = MCTSPlayer(policy_value_net.policy_value_fn, c_puct=args.c_puct, n_playout=args.n_playout, is_selfplay=1)
 
+
 states_buf, probs_buf, winners_buf = [], [], []
+counter = 0
 while len(states_buf) < args.n_examples:
-    _, (states, probs, winners) = game.start_self_play(mcts_player, temp=args.temperature, is_shown=1)
+    _, (states, probs, winners) = game.start_self_play(mcts_player, temp=args.temperature, is_shown=False)
     states_buf.extend(states)
     probs_buf.extend(probs)
     winners_buf.extend(winners)
     logger.info('generated {}/{} examples'.format(len(states_buf), args.n_examples))
 
+    if (counter + 1) % 100 == 0:
+        save_file = os.path.join(data_dir, "games_{}.npz".format(counter))
+        np.savez(save_file, **{'args': args,
+                               'states': np.array(list(states_buf)),
+                               'probs':  np.array(list(probs_buf)),
+                               'winners':  np.array(list(winners_buf))})
+
+    counter += 1
+
 now = datetime.now()
-save_file = os.path.join(data_dir, "{day}_{m}_{h}:{min}".format(day=now.day, m=now.month, h=now.hour, min=now.minute))
-np.savez(save_file, **{'args':args, 'states':states_buf[:args.n_examples], 'probs':probs_buf[:args.n_examples], 'winners':winners_buf[:args.n_examples]})
+save_file = os.path.join(data_dir, "games.npz")
+np.savez(save_file, **{'args': args,
+                       'states': states_buf[:args.n_examples],
+                       'probs': probs_buf[:args.n_examples],
+                       'winners': winners_buf[:args.n_examples]})

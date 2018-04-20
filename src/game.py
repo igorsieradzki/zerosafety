@@ -139,8 +139,9 @@ class Board(object):
 class Game(object):
     """game server"""
 
-    def __init__(self, board, **kwargs):
+    def __init__(self, board, verbose=False, **kwargs):
         self.board = board
+        self.verbose = verbose
 
     def graphic(self, board, player1, player2):
         """Draw the board and show game info"""
@@ -183,7 +184,7 @@ class Game(object):
             current_player = self.board.get_current_player()
             player_in_turn = players[current_player]
 
-            if player_in_turn.is_human and start_player != 0:
+            if is_shown and player_in_turn.is_human and len(self.board.states) > 0:
                 print("Alpha Zero's last move: {}".format(self.board.move_to_location(move)))
 
             move = player_in_turn.get_action(self.board)

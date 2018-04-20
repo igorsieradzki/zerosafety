@@ -5,6 +5,7 @@ import tensorflow as tf
 import numpy as np
 import os
 
+import pdb
 
 def alpha_zero_residual_block(inputs, filters=64, kernel_size=(3, 3), activation=tf.nn.relu):
 
@@ -71,15 +72,19 @@ def load_data(file_name):
 
 class Dataset(object):
     def __init__(self,
+                 n_samples : int,
                  file_name: str,
                  default_bs: int,
+                 augument : bool = True,
                  shuffle: bool = True,
                  seed: int = 42):
 
+        self.n_samples = n_samples
         self.file_name = file_name
 
         self.default_bs = default_bs
         self.shuffle = shuffle
+        self.augument = augument
 
         self._load()
 
@@ -88,10 +93,6 @@ class Dataset(object):
 
         self.seed = seed
         self.rng = np.random.RandomState(seed)
-
-    @property
-    def n_samples(self):
-        return len(self.data)
 
     @property
     def batch_size(self):
@@ -111,9 +112,18 @@ class Dataset(object):
                                                         self.batches_in_epoch, )
 
     def _load(self):
-        args, states, probs, winners = load_data()
-        states, probs, winners = augument_data(states=states, probs=probs, winners=winners,
-                                               board_height=args['board_height'], board_width=args['board_width'])
+        params, states, probs, winners = load_data(self.file_name)
+
+        if self.augument:
+            states, probs, winners = augument_data(states=states[:self.n_samples],
+                                                   probs=probs[:self.n_samples],
+                                                   winners=winners[:self.n_samples],
+                                                   board_height=params.item().board_height,
+                                                   board_width=params.item().board_width)
+        else:
+            states = states[:self.n_samples]
+            probs = probs[:self.n_samples]
+            winners = winners[:self.n_samples]
 
         self.states = states
         self.probs = probs

@@ -10,14 +10,14 @@ from datetime import datetime
 
 flags = tf.app.flags
 flags.DEFINE_string("model", None, "model directory to load")
-flags.DEFINE_integer("board_width", 6, "board width")
-flags.DEFINE_integer("board_height", 6, "board heright")
-flags.DEFINE_integer("n_in_row", 4, "how many stones in arow to win")
+flags.DEFINE_integer("board_width", 8, "board width")
+flags.DEFINE_integer("board_height", 8, "board heright")
+flags.DEFINE_integer("n_in_row", 5, "how many stones in arow to win")
 flags.DEFINE_float("lr", 2e-3, "learing rate for optimizer")
 flags.DEFINE_integer("playouts", 400, "number of MCTS playouts")
 flags.DEFINE_integer("batch_size", 512, "batch size for trainig policy/value net")
 flags.DEFINE_integer("train_steps", 5, "number of train steps for polic/value net")
-flags.DEFINE_integer("check_freq", 50, "after how many iteratons to evaluate")
+flags.DEFINE_integer("check_freq", 100, "after how many iteratons to evaluate")
 flags.DEFINE_integer("iters", 1500, "number of training iterations")
 flags.DEFINE_string("save_dir", None, "dir to save the model in")
 flags.DEFINE_boolean("debug", False, "Debug mode")
