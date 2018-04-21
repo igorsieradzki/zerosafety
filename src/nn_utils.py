@@ -100,7 +100,7 @@ class Dataset(object):
 
     @property
     def batches_in_epoch(self):
-        return (self.n_samples // self.default_bs) + 1
+        return (self.size // self.default_bs) + 1
 
     @property
     def current_batch_in_epoch(self):
@@ -129,6 +129,10 @@ class Dataset(object):
         self.probs = probs
         self.winners = winners
 
+    @property
+    def size(self):
+        return 1 * self.n_samples
+
 
     def _get_data(self, ids):
         return self.states[ids], self.probs[ids], self.winners[ids]
@@ -148,9 +152,9 @@ class Dataset(object):
             self._reset()
 
         # last batch in epoch:
-        if self.index_in_epoch + batch_size > self.n_samples:
+        if self.index_in_epoch + batch_size > self.size:
             self.current_epoch += 1
-            n_rest_sampels = self.n_samples - self.index_in_epoch
+            n_rest_sampels = self.size - self.index_in_epoch
             rest_indices = self.indices[-n_rest_sampels:]
 
             self._reset()
@@ -184,7 +188,7 @@ class Dataset(object):
         :return:
         """
         self.index_in_epoch = 0
-        self.indices = np.arange(self.n_samples)
+        self.indices = np.arange(self.size)
 
         if self.shuffle:
             self.rng.shuffle(self.indices)
@@ -215,4 +219,61 @@ def augument_data(states, probs, winners, board_height, board_width):
 
 
 
+def get_test_x():
+    x = np.array([[[0., 0., 0., 1.],
+                   [0., 0., 0., 1.],
+                   [0., 0., 0., 1.],
+                   [0., 0., 0., 1.],
+                   [0., 0., 0., 1.],
+                   [0., 0., 0., 1.]],
 
+                  [[0., 0., 0., 1.],
+                   [0., 0., 0., 1.],
+                   [0., 0., 0., 1.],
+                   [0., 0., 0., 1.],
+                   [0., 0., 0., 1.],
+                   [0., 0., 0., 1.]],
+
+                  [[0., 0., 0., 1.],
+                   [0., 0., 0., 1.],
+                   [0., 1., 0., 1.],
+                   [0., 0., 0., 1.],
+                   [0., 0., 0., 1.],
+                   [0., 0., 0., 1.]],
+
+                  [[0., 0., 0., 1.],
+                   [0., 1., 1., 1.],
+                   [1., 0., 0., 1.],
+                   [1., 0., 0., 1.],
+                   [0., 0., 0., 1.],
+                   [0., 0., 0., 1.]],
+
+                  [[0., 0., 0., 1.],
+                   [0., 0., 0., 1.],
+                   [0., 0., 0., 1.],
+                   [0., 0., 0., 1.],
+                   [0., 0., 0., 1.],
+                   [0., 0., 0., 1.]],
+
+                  [[0., 0., 0., 1.],
+                   [0., 0., 0., 1.],
+                   [0., 0., 0., 1.],
+                   [0., 0., 0., 1.],
+                   [0., 0., 0., 1.],
+                   [0., 0., 0., 1.]]])
+
+    x = x.reshape(1, 6, 6, 4)
+
+    # state rotation
+    x = np.concatenate([np.rot90(x, k=i, axes=(1, 2)) for i in range(4)], axis=0)
+    # state horizontal flip
+    x = np.concatenate([x, np.flip(x, axis=2)], axis=0)
+
+    # net = PolicyValueNet(board_width=6,
+    #                      board_height=6,
+    #                      model_file=os.path.join(results_dir, 'zero_17_4_15:36', 'policy_1500.model'))
+
+    return x
+
+def d_kl(p, q):
+    return np.mean(np.sum(p * (np.log(p) - np.log(q)), axis=1))

@@ -5,28 +5,43 @@ from src.policy_value_net_tensorflow import PolicyValueNet
 from src import data_dir, logger, results_dir
 from time import time
 import numpy as np
-from src.nn_utils import Dataset
+from src.nn_utils import Dataset, get_test_x, d_kl
 from src.mcts_alphaZero import MCTSPlayer
 from src.mcts_pure import MCTSPlayer as MCTS_Pure
 from src.game import Board, Game
 from tqdm import tqdm, trange
+import tensorflow as tf
+
+
+
 
 
 def train_nn(data_filename,
              board_height=6,
              board_width=6,
              n_in_row=4,
-             batch_size=128,
-             epochs=20,
-             learning_rate=1e-2,
+             batch_size=32,
+             epochs=15,
+             learning_rate=5e-3,
              check_freq=200):
 
     train = True
 
-    dataset = Dataset(file_name=data_filename, default_bs=batch_size, n_samples=50000, augument=True)
+    dataset = Dataset(file_name=data_filename, default_bs=batch_size, n_samples=2000, augument=True)
 
 
     if train:
+        teacher = PolicyValueNet(board_width=board_width,
+                                 board_height=board_height,
+                                 model_file=os.path.join(results_dir, 'zero_17_4_15:36', 'policy_1500.model'))
+
+        test_x = get_test_x()
+
+        teacher_probs, teacher_value = teacher.policy_value(test_x)
+        # teacher_move = np.random.choice(np.arange(36), p=teacher_probs)
+
+        tf.reset_default_graph()
+
         student = PolicyValueNet(board_width=board_width, board_height=board_height)
 
         save_dir = os.path.join(results_dir, "student")
@@ -47,10 +62,11 @@ def train_nn(data_filename,
     pure_mcts_playout_num = 1000
     c_puct = 5
     n_playouts = 400
-    n_games = 20
+    n_games = 10
     log_freq = 50
 
     counter = 0
+    correct_counter = 0
     start_time = time()
 
     if train:
@@ -72,7 +88,20 @@ def train_nn(data_filename,
 
             counter += 1
 
-            # if (counter + 1) % check_freq == 0:
+            if (counter + 1) % check_freq == 0:
+                student_probs, student_value = student.policy_value(test_x)
+                # student_move = np.random.choice(np.arange(36), p=student_probs)
+
+
+
+                kl = d_kl(student_probs, teacher_probs)
+                mse = np.mean(np.square(student_value - teacher_value))
+                prob_mse = np.mean(np.square(student_probs - teacher_probs))
+
+                max_abs = np.max(np.abs(student_probs - teacher_probs))
+
+                logger.info("evaluation: Dkl: {:.4}, MSE: {:.4}, prob_mse: {:.5}, max: {:.3}".format(kl, mse, prob_mse, max_abs))
+
 
         student.save_model(os.path.join(save_dir, 'current_policy.model'))
 

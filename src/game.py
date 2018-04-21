@@ -192,6 +192,7 @@ class Game(object):
             if is_shown:
                 os.system('clear')
                 self.graphic(self.board, player1.player, player2.player)
+
             end, winner = self.board.game_end()
             if end:
                 if is_shown:

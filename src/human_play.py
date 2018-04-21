@@ -74,7 +74,7 @@ def run():
 
 
         # set start_player=0 for human first
-        game.start_play(human, mcts_player, start_player=0, is_shown=1)
+        game.start_play(human, mcts_player, start_player=1, is_shown=1)
     except KeyboardInterrupt:
         print('\n\rquit')
 
